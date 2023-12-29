@@ -1,0 +1,17 @@
+cluster:
+  name: kubernetes
+k8sServiceHost: 192.168.1.32
+k8sServicePort: 6443
+kubeProxyReplacement: strict
+operator:
+  replicas: 2
+routingMode: tunnel
+serviceAccounts:
+  cilium:
+    name: cilium
+  operator:
+    name: cilium-operator
+tunnelProtocol: vxlan
+bpf:
+  masquerade: true
+
