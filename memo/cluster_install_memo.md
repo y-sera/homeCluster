@@ -62,6 +62,12 @@ EOF
 sudo sysctl --system
 ```
 
+コントロールプレーン1台目
+```
+sudo kubeadm init --control-plane-endpoint 192.168.1.32:6443 --skip-phases=addon/kube-proxy
+```
+
+
 コントロールプレーンjoin
 ```
 sudo kubeadm join 192.168.1.32:6443 --token wld9hi.eeuf88oakuufa2mk \
