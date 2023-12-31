@@ -64,19 +64,20 @@ sudo sysctl --system
 
 コントロールプレーン1台目
 ```
-sudo kubeadm init --control-plane-endpoint 192.168.1.32:6443 --skip-phases=addon/kube-proxy
+sudo kubeadm init --control-plane-endpoint k8sapiserver.cluster.orenet.net:6443 --skip-phases=addon/kube-proxy --upload-certs
 ```
 
 
 コントロールプレーンjoin
 ```
-sudo kubeadm join 192.168.1.32:6443 --token wld9hi.eeuf88oakuufa2mk \
-	--discovery-token-ca-cert-hash sha256:f9b01b88b87c787b136c27841bf584621d0f707d87f7936d8b61bccf49f133d6 \
-	--control-plane --certificate-key a4dbd5d901ae0d0c2ab89f9c36a0586aff8546fc52c99d8829503446e0ba9e02
+  kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
+	--discovery-token-ca-cert-hash sha256:d48db821676017be4a9df5ea5e88ee68ab38b68b168d53e18be7dc1dbd7a04cc \
+	--control-plane --certificate-key c671fe05cab01374a166b0622ab52ad3b47e425b352884a991015ac98ada46e6
 ```
 
 workerノードjoin
 ```
-sudo kubeadm join 192.168.1.32:6443 --token wld9hi.eeuf88oakuufa2mk \
-	--discovery-token-ca-cert-hash sha256:f9b01b88b87c787b136c27841bf584621d0f707d87f7936d8b61bccf49f133d6 \
+kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
+	--discovery-token-ca-cert-hash sha256:d48db821676017be4a9df5ea5e88ee68ab38b68b168d53e18be7dc1dbd7a04cc 
 ```
+
