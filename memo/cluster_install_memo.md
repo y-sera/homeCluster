@@ -70,14 +70,14 @@ sudo kubeadm init --control-plane-endpoint k8sapiserver.cluster.orenet.net:6443 
 
 コントロールプレーンjoin
 ```
-  kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
+sudo  kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
 	--discovery-token-ca-cert-hash sha256:d48db821676017be4a9df5ea5e88ee68ab38b68b168d53e18be7dc1dbd7a04cc \
 	--control-plane --certificate-key c671fe05cab01374a166b0622ab52ad3b47e425b352884a991015ac98ada46e6
 ```
 
 workerノードjoin
 ```
-kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
+sudo kubeadm join k8sapiserver.cluster.orenet.net:6443 --token sbesef.ke8kbt0jo72zqw60 \
 	--discovery-token-ca-cert-hash sha256:d48db821676017be4a9df5ea5e88ee68ab38b68b168d53e18be7dc1dbd7a04cc 
 ```
 
