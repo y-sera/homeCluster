@@ -1,0 +1,107 @@
+---
+clientInfoSecret:
+  # How to connect to your Synology Diskstation?
+  clients:
+  # Whether to create the secret if the chart gets installed or not; ignored on updates.
+  create: true
+  # Defaults to {{ include "synology-csi.fullname" $ }}-client-info if empty or not present:
+  name: ""
+# Specifies affinity, nodeSelector and tolerations for the controller StatefulSet
+controller:
+  affinity: { }
+  nodeSelector: { }
+  tolerations: [ ]
+fullnameOverride: ""
+images:
+  attacher:
+    image: registry.k8s.io/sig-storage/csi-attacher
+    pullPolicy: IfNotPresent
+    tag: v4.3.0
+  nodeDriverRegistrar:
+    image: registry.k8s.io/sig-storage/csi-node-driver-registrar
+    pullPolicy: IfNotPresent
+    tag: v2.8.0
+  plugin:
+    image: synology/synology-csi
+    pullPolicy: IfNotPresent
+    # Defaults to {{ $.Chart.AppVersion }} if empty or not present:
+    tag: ""
+  provisioner:
+    image: registry.k8s.io/sig-storage/csi-provisioner
+    pullPolicy: IfNotPresent
+    tag: v3.5.0
+  resizer:
+    image: registry.k8s.io/sig-storage/csi-resizer
+    pullPolicy: IfNotPresent
+    tag: v1.8.0
+  snapshotter:
+    image: registry.k8s.io/sig-storage/csi-snapshotter
+    pullPolicy: IfNotPresent
+    tag: v6.2.2
+installCSIDriver: true
+nameOverride: ""
+# Specifies affinity, nodeSelector and tolerations for the node DaemonSet
+node:
+  affinity: { }
+  nodeSelector: { }
+  tolerations: [ ]
+# Specifies affinity, nodeSelector and tolerations for the snapshotter StatefulSet
+snapshotter:
+  affinity: { }
+  nodeSelector: { }
+  tolerations: [ ]
+storageClasses:
+  delete:
+    # One of true or false (default):
+    ##disabled: false
+    # One of true or false (default):
+    ##isDefault: false
+    # One of "Retain" or "Delete" (default):
+    reclaimPolicy: Delete
+    # One of "WaitForFirstConsumer" or "Immediate" (default):
+    ##volumeBindingMode: Immediate
+
+    # If not present, some location will be chosen to create volumes with the filesystem type ext4.
+    # Note that these parameters cannot get updated once deployed - any subsequent changes get ignored!
+    parameters:
+    ##  dsm: "1.1.1.1"
+    ##  fsType: ext4
+      location: /volume2
+  retain:
+    reclaimPolicy: Retain
+    # One of true or false (default):
+    ##disabled: false
+    # One of true or false (default):
+    isDefault: true 
+    # One of "Retain" or "Delete" (default):
+    reclaimPolicy: Retain
+    # One of "WaitForFirstConsumer" or "Immediate" (default):
+    ##volumeBindingMode: Immediate
+
+    # If not present, some location will be chosen to create volumes with the filesystem type ext4.
+    # Note that these parameters cannot get updated once deployed - any subsequent changes get ignored!
+    parameters:
+    ##  dsm: "1.1.1.1"
+      fsType: "btrfs"
+      location: /volume2
+  smb:
+    reclaimPolicy: Delete 
+    parameters:
+      protocol: "smb"
+      location: /volume3
+volumeSnapshotClasses:
+  delete: { }
+    # One of true or false (default):
+    ##disabled: false
+    # One of "Retain" or "Delete" (default):
+    ##deletionPolicy: Delete
+    # One of true or false (default):
+    ##isDefault: false
+
+    # Note that these parameters cannot get updated once deployed - any subsequent changes get ignored!
+    ##parameters:
+    ##  description: "Kubernetes CSI"
+    ##  is_locked: "false"
+  retain:
+    deletionPolicy: Retain
+
