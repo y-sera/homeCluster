@@ -1,0 +1,30 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  acme:
+    # You must replace this email address with your own.
+    # Let's Encrypt will use this to contact you about expiring
+    # certificates, and issues related to your account.
+    email: yasuaki.sera15@gmail.com
+    ## certificate for staging
+    # server: https://acme-staging-v02.api.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: issuer-kubernetes-dashboard-key
+    solvers:
+    - selector:
+        dnsZones:
+          - cluster.orenet.net
+      dns01:
+        route53:
+          region: ap-northeast-1
+          hostedZoneID: Z05445192J4SXI7BR474Q # optional, see policy above
+          accessKeyIDSecretRef:
+            name: route53-credentials-secret
+            key: access-key-id
+          secretAccessKeySecretRef:
+            name: route53-credentials-secret
+            key: secret-access-key

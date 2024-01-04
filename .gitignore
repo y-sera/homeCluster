@@ -1,1 +1,2 @@
 .sops.yaml
+manifest/cert-manager/*secrets.yaml
