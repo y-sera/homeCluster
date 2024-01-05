@@ -31,7 +31,7 @@ crds:
   # -- Install and upgrade CRDs
   install: true
   # -- Keep CRDs on chart uninstall
-  keep: true
+  keep: false
   # -- Annotations to be added to all CRDs
   annotations: {}
   # -- Addtional labels to be added to all CRDs
@@ -1391,7 +1391,7 @@ redis:
 # Ref: https://github.com/DandyDeveloper/charts/blob/master/charts/redis-ha/values.yaml
 redis-ha:
   # -- Enables the Redis HA subchart and disables the custom Redis single node deployment
-  enabled: false
+  enabled: true
   ## Redis image
   image:
     # -- Redis repository
@@ -1498,9 +1498,9 @@ server:
   ## Argo CD server Horizontal Pod Autoscaler
   autoscaling:
     # -- Enable Horizontal Pod Autoscaler ([HPA]) for the Argo CD server
-    enabled: false
+    enabled: true
     # -- Minimum number of replicas for the Argo CD server [HPA]
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum number of replicas for the Argo CD server [HPA]
     maxReplicas: 5
     # -- Average CPU utilization percentage for the Argo CD server [HPA]
@@ -1926,20 +1926,23 @@ server:
 
   ingress:
     # -- Enable an ingress resource for the Argo CD server
-    enabled: false
+    enabled: true
     # -- Additional ingress annotations
-    annotations: {}
+    annotations:
+      cert-manager.io/issuer: argocd
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     # -- Additional ingress labels
     labels: {}
     # -- Defines which ingress controller will implement the resource
-    ingressClassName: ""
+    ingressClassName: "nginx"
 
     # -- List of ingress hosts
     ## Argo Ingress.
     ## Hostnames must be provided if Ingress is enabled.
     ## Secrets must be manually created in the namespace
-    hosts: []
-      # - argocd.example.com
+    hosts:
+      - argocd.cluster.orenet.net
 
     # -- List of ingress paths
     paths:
@@ -1957,13 +1960,13 @@ server:
       #         name: use-annotation
 
     # -- Ingress TLS configuration
-    tls: []
-      # - secretName: your-certificate-name
-      #   hosts:
-      #     - argocd.example.com
+    tls:
+      - secretName: argocd-cert
+        hosts:
+          - argocd.cluster.orenet.net
 
     # -- Uses `server.service.servicePortHttps` instead `server.service.servicePortHttp`
-    https: false
+    https: true
 
   # dedicated ingress for gRPC as documented at
   # Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/ingress/
@@ -2082,9 +2085,9 @@ repoServer:
   ## Repo server Horizontal Pod Autoscaler
   autoscaling:
     # -- Enable Horizontal Pod Autoscaler ([HPA]) for the repo server
-    enabled: false
+    enabled: true
     # -- Minimum number of replicas for the repo server [HPA]
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum number of replicas for the repo server [HPA]
     maxReplicas: 5
     # -- Average CPU utilization percentage for the repo server [HPA]
@@ -2438,7 +2441,7 @@ applicationSet:
   name: applicationset-controller
 
   # -- The number of ApplicationSet controller pods to run
-  replicas: 1
+  replicas: 2
 
   ## ApplicationSet controller Pod Disruption Budget
   ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
@@ -2691,19 +2694,22 @@ applicationSet:
   webhook:
     ingress:
       # -- Enable an ingress resource for Webhooks
-      enabled: false
+      enabled: true
       # -- Additional ingress annotations
-      annotations: {}
+      annotations:
+        cert-manager.io/issuer: argocd
+        nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+        nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
       # -- Additional ingress labels
       labels: {}
       # -- Defines which ingress ApplicationSet controller will implement the resource
-      ingressClassName: ""
+      ingressClassName: "nginx"
 
       # -- List of ingress hosts
       ## Hostnames must be provided if Ingress is enabled.
       ## Secrets must be manually created in the namespace
-      hosts: []
-        # - argocd-applicationset.example.com
+      hosts:
+        - argocd.cluster.orenet.net
 
       # -- List of ingress paths
       paths:
@@ -2726,10 +2732,10 @@ applicationSet:
         #         name: use-annotation
 
       # -- Ingress TLS configuration
-      tls: []
-        # - secretName: argocd-applicationset-tls
-        #   hosts:
-        #     - argocd-applicationset.example.com
+      tls:
+        - secretName: argocd-cert
+          hosts:
+            - argocd.cluster.orenet.net
 
   # TLS certificate configuration via cert-manager
   ## Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/tls/#tls-configuration
