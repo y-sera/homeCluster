@@ -1,0 +1,27 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gitlab 
+  namespace: gitlab
+spec:
+  commonName: cluster.orenet.net
+  dnsNames:
+  - gitlab.cluster.orenet.net
+  - cluster.orenet.net
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: gitlab 
+  privateKey:
+    rotationPolicy: Always
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  renewBefore: 360h0m0s
+  secretName: gitlab-cert
+  subject:
+    organizations:
+    - orenet
+  usages:
+  - digital signature
