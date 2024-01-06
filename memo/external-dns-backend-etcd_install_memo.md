@@ -10,7 +10,7 @@ https://etcd.io/docs/v3.5/install/#installation-on-kubernetes-using-a-statefulse
 
 ## インストール用コマンド
 ```
-helm install -n external-dns-backend external-dns-backend-etcd bitnami/etcd 
+helm install -n external-dns-backend external-dns-backend-etcd bitnami/etcd --values values.yaml
 ```
 
 インストール時の出力結果
