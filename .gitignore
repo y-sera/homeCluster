@@ -1,2 +1,3 @@
 .sops.yaml
 manifest/certificate/*secrets.yaml
+manifest/synology-csi/*secrets.yaml
