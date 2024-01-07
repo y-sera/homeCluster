@@ -1,0 +1,27 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault 
+  namespace: vault
+spec:
+  commonName: cluster.orenet.net
+  dnsNames:
+  - vault.cluster.orenet.net
+  - cluster.orenet.net
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: vault 
+  privateKey:
+    rotationPolicy: Always
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  renewBefore: 360h0m0s
+  secretName: vault-cert
+  subject:
+    organizations:
+    - orenet
+  usages:
+  - digital signature
