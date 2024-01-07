@@ -9,7 +9,7 @@ global:
   enabled: true
 
   # The namespace to deploy to. Defaults to the `helm` installation namespace.
-  namespace: ""
+  namespace: "vault"
 
   # Image pull secret to use for registry authentication.
   # Alternatively, the value may be specified as an array of strings.
@@ -46,7 +46,7 @@ global:
 injector:
   # True if you want to enable vault agent injection.
   # @default: global.enabled
-  enabled: "-"
+  enabled: "false"
 
   replicas: 1
 
@@ -407,7 +407,7 @@ server:
   # If deployment is on OpenShift, the following block is ignored.
   # In order to expose the service, use the route section below
   ingress:
-    enabled: false
+    enabled: true
     labels: {}
       # traffic: external
     annotations: {}
@@ -420,7 +420,7 @@ server:
 
     # Optionally use ingressClassName instead of deprecated annotation.
     # See: https://kubernetes.io/docs/concepts/services-networking/ingress/#deprecated-annotation
-    ingressClassName: ""
+    ingressClassName: "nginx"
 
     # As of Kubernetes 1.19, all Ingress Paths must have a pathType configured. The default value below should be sufficient in most cases.
     # See: https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types for other possible values.
@@ -430,7 +430,7 @@ server:
     # configure the ingress to point to the Vault active service.
     activeService: true
     hosts:
-      - host: chart-example.local
+      - host: valut.cluster.orenet.net
         paths: []
     ## Extra paths to prepend to the host configuration. This is useful when working with annotation based services.
     extraPaths: []
@@ -440,10 +440,10 @@ server:
     #       name: ssl-redirect
     #       port:
     #         number: use-annotation
-    tls: []
-    #  - secretName: chart-example-tls
-    #    hosts:
-    #      - chart-example.local
+    tls:
+      - secretName: vault-cert
+        hosts:
+          - vault.cluster.orenet.net
 
   # hostAliases is a list of aliases to be added to /etc/hosts. Specified as a YAML list.
   hostAliases: []
@@ -866,7 +866,7 @@ server:
   # Helm project by default.  It is possible to manually configure Vault to use a
   # different HA backend.
   ha:
-    enabled: false
+    enabled: true
     replicas: 3
 
     # Set the api_addr configuration for Vault HA
@@ -1025,7 +1025,7 @@ ui:
   # serviceType can be used to control the type of service created. For
   # example, setting this to "LoadBalancer" will create an external load
   # balancer (for supported K8S installations) to access the UI.
-  enabled: false
+  enabled: true
   publishNotReadyAddresses: true
   # The service should only contain selectors for active Vault pod
   activeVaultPodOnly: false
