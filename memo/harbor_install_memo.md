@@ -1,19 +1,17 @@
 # harborインストールメモ
 namespace: harbor
 helm名: harbor
-Chart: bitnami/harbor
+Chart: harbor/harbor
 
 
 ## 方針
-- 公式Chartはpostgresplでinitdbを実行する際, /var/lib/postgresql/data配下のディレクトリ作成にてPermissionエラーが発生するため,
-  使用を断念. 代わりにbitnami/harborを使用する.
-- ストレージはNASのブロックストレージを利用する.
+- topolvmにてfsGroup機能を利用可能であり, ストレージのパーミッションエラーが解消されたため公式のチャートを利用する.
+- ストレージはtopolvmを利用.
 
-## 現状
-- NASのLUN数が上限に達するため, 現時点ではデプロイを断念.
-  TopoLVMを整備後にリトライする.
+## 設定
+
 
 ## インストールコマンド
 ```
-helm install -n harbor harbor bitnami/harbor --values values.yaml
+helm install -n harbor harbor harbor/harbor --values values.yaml
 ```
