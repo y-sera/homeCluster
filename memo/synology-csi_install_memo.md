@@ -9,8 +9,11 @@ helm名: synology-csi
 - synology-csi-delete 
 - synology-csi-retain
 ファイルストレージは, smbプロトコルを用いてsynology-csiの機能の中で提供する.
-- synology-csi-smb
+- synology-csi-smb-delete
+- synology-csi-smb-retain
 
+defaultストレージクラスは, synology-csi-deleteとする.
+これは, PVCを削除すれば自動でLUNを開放してくれる.
 必要に応じて, ストレージクラスは増やしていく.
 
 

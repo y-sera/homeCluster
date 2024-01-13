@@ -65,7 +65,7 @@ storageClasses:
     # One of true or false (default):
     ##disabled: false
     # One of true or false (default):
-    ##isDefault: false
+    isDefault: true
     # One of "Retain" or "Delete" (default):
     reclaimPolicy: Delete
     # One of "WaitForFirstConsumer" or "Immediate" (default):
@@ -75,14 +75,14 @@ storageClasses:
     # Note that these parameters cannot get updated once deployed - any subsequent changes get ignored!
     parameters:
     ##  dsm: "1.1.1.1"
-    ##  fsType: ext4
+      fsType: "btrfs"
       location: /volume2
   retain:
     reclaimPolicy: Retain
     # One of true or false (default):
     ##disabled: false
     # One of true or false (default):
-    isDefault: true 
+    isDefault: false
     # One of "Retain" or "Delete" (default):
     reclaimPolicy: Retain
     # One of "WaitForFirstConsumer" or "Immediate" (default):
@@ -94,7 +94,15 @@ storageClasses:
     ##  dsm: "1.1.1.1"
       fsType: "btrfs"
       location: /volume2
-  smb:
+  smb-retain:
+    isDefault: false
+    reclaimPolicy: Retain
+    parameters:
+      protocol: "smb"
+      location: /volume3
+      csi.storage.k8s.io/node-stage-secret-name: "cifs-csi-credentials"
+      csi.storage.k8s.io/node-stage-secret-namespace: "synology-csi"
+  smb-delete:
     reclaimPolicy: Delete 
     parameters:
       protocol: "smb"
