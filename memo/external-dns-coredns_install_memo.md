@@ -19,7 +19,7 @@ DNS構成は要検討
 
 # インストールコマンド
 ```
-helm install -n external-dns-coredns external-dns-coredns coredns/coredns
+helm install -n external-dns-coredns external-dns-coredns coredns/coredns --values values.yaml
 ```
 
 
