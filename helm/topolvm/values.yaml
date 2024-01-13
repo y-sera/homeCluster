@@ -39,7 +39,7 @@ image:
 # A scheduler extender for TopoLVM
 scheduler:
   # scheduler.enabled --  If true, enable scheduler extender for TopoLVM
-  enabled: false
+  enabled: true
 
   # scheduler.args -- Arguments to be passed to the command.
   args: []
@@ -140,7 +140,7 @@ lvmd:
   # lvmd.deviceClasses -- Specify the device-class settings.
   deviceClasses:
     - name: ssd
-      volume-group: myvg1
+      volume-group: topolvm-vg
       default: true
       spare-gb: 10
 
