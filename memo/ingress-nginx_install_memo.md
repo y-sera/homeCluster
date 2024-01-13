@@ -4,7 +4,7 @@
 
 ひとまず、デフォルト設定でインストール
 ```
-helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx 
+helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --values values.yaml
 ```
 
 インストール後、ingressリソースを追加するためのyaml設定
