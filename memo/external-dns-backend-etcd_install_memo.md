@@ -1,12 +1,17 @@
 # external-dnsのバックエンド用etcdインストール
 
+## 方針
 インストール先namespace: external-dns-backend
 name: external-dns-backend-etcd
 
 etcdは公式チャートは存在していないため、bitnami提供のチャートを使用する.
 https://etcd.io/docs/v3.5/install/#installation-on-kubernetes-using-a-statefulset-or-helm-chart
-一旦はデフォルト設定で構築する.
 
+1podしか立てずnode依存してしまうため, ストレージクラスは一旦synology-csi-deleteで設定. 
+冗長性も含め詳細は後日検討.
+
+## 設定
+- ストレージクラスを明記(synology-csi-delete)
 
 ## インストール用コマンド
 ```
