@@ -1,0 +1,27 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana
+  namespace: prometheus
+spec:
+  commonName: cluster.orenet.net
+  dnsNames:
+  - grafana.cluster.orenet.net
+  - cluster.orenet.net
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: grafana
+  privateKey:
+    rotationPolicy: Always
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  renewBefore: 360h0m0s
+  secretName: grafana-cert
+  subject:
+    organizations:
+    - orenet
+  usages:
+  - digital signature
