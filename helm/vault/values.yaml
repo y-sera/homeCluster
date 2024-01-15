@@ -430,7 +430,7 @@ server:
     # configure the ingress to point to the Vault active service.
     activeService: true
     hosts:
-      - host: valut.cluster.orenet.net
+      - host: vault.cluster.orenet.net
         paths: []
     ## Extra paths to prepend to the host configuration. This is useful when working with annotation based services.
     extraPaths: []
@@ -575,10 +575,16 @@ server:
 
   # extraSecretEnvironmentVars is a list of extra environment variables to set with the stateful set.
   # These variables take value from existing Secret objects.
-  extraSecretEnvironmentVars: []
-    # - envName: AWS_SECRET_ACCESS_KEY
-    #   secretName: vault
-    #   secretKey: AWS_SECRET_ACCESS_KEY
+  extraSecretEnvironmentVars:
+     - envName: AWS_ACCESS_KEY_ID
+       secretName: vault
+       secretKey: AWS_ACCESS_KEY_ID
+     - envName: AWS_SECRET_ACCESS_KEY
+       secretName: vault
+       secretKey: AWS_SECRET_ACCESS_KEY
+     - envName: VAULT_AWSKMS_SEAL_KEY_ID
+       secretName: vault
+       secretKey: VAULT_AWSKMS_SEAL_KEY_ID
 
   # Deprecated: please use 'volumes' instead.
   # extraVolumes is a list of extra volumes to mount. These will be exposed
@@ -764,7 +770,7 @@ server:
     mountPath: "/vault/data"
     # Name of the storage class to use.  If null it will use the
     # configured default Storage Class.
-    storageClass: null
+    storageClass: topolvm-provisioner
     # Access Mode of the storage device being used for the PVC
     accessMode: ReadWriteOnce
     # Annotations to apply to the PVC
@@ -886,7 +892,7 @@ server:
     raft:
 
       # Enables Raft integrated storage
-      enabled: false
+      enabled: true
       # Set the Node Raft ID to the name of the pod
       setNodeId: false
 
@@ -902,16 +908,32 @@ server:
           address = "[::]:8200"
           cluster_address = "[::]:8201"
           # Enable unauthenticated metrics access (necessary for Prometheus Operator)
-          #telemetry {
-          #  unauthenticated_metrics_access = "true"
-          #}
+          telemetry {
+            unauthenticated_metrics_access = "true"
+          }
         }
 
         storage "raft" {
           path = "/vault/data"
+
+          retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+          }
+
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }
+
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }
         }
 
         service_registration "kubernetes" {}
+
+        seal "awskms" {
+          region = "ap-northeast-1"
+        }
 
     # config is a raw string of default configuration when using a Stateful
     # deployment. Default is to use a Consul for its HA storage backend.
@@ -1160,7 +1182,7 @@ csi:
     extraLabels: {}
 
   agent:
-    enabled: true
+    enabled: false
     extraArgs: []
 
     image:
