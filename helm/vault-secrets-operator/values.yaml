@@ -404,12 +404,12 @@ metricsService:
 defaultVaultConnection:
   # toggles the deployment of the VaultAuthMethod CR
   # @type: boolean
-  enabled: false
+  enabled: true
 
   # Address of the Vault Server
   # @type: string
   # Example: http://vault.default.svc.cluster.local:8200
-  address: ""
+  address: "http://valut.vault.svc.cluster.local:8200"
 
   # CACertSecret is the name of a Kubernetes secret containing the trusted PEM encoded CA certificate chain as `ca.crt`.
   # Note: This secret must exist prior to deploying the CR.
