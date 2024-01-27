@@ -279,12 +279,16 @@ console:
   #
   # Set the keys to conform to the Ingress controller and configuration of your choice.
   ingress:
-    enabled: false
-    ingressClassName: ""
+    enabled: true
+    ingressClassName: "nginx"
     labels: { }
-    annotations: { }
-    tls: [ ]
-    host: console.local
+    annotations:
+      cert-manager.io/issuer: minio
+    tls:
+      - hosts:
+        - minio.cluster.orenet.net
+        secretName: minio-cert
+    host: minio.cluster.orenet.net
     path: /
     pathType: Prefix
   ###
