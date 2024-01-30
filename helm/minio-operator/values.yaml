@@ -283,12 +283,12 @@ console:
     ingressClassName: "nginx"
     labels: { }
     annotations:
-      cert-manager.io/issuer: minio
+      cert-manager.io/issuer: minio-operator
     tls:
       - hosts:
-        - minio.cluster.orenet.net
+        - minio-operator.cluster.orenet.net
         secretName: minio-cert
-    host: minio.cluster.orenet.net
+    host: minio-operator.cluster.orenet.net
     path: /
     pathType: Prefix
   ###

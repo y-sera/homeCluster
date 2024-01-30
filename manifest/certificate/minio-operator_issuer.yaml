@@ -1,7 +1,7 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: minio
+  name: minio-operator
   namespace: minio-operator
 spec:
   acme:
@@ -13,7 +13,7 @@ spec:
     # server: https://acme-staging-v02.api.letsencrypt.org/directory
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
-      name: issuer-argocd-key
+      name: issuer-minio-operator-key
     solvers:
     - selector:
         dnsZones:

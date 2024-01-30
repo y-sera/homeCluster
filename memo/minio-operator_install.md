@@ -4,7 +4,7 @@ helm名: minio-operator
 chart名: minio-operator/operator
 
 ## 方針
-1. operatorはhelmで導入する. tenantは一旦コマンドで作成し, その後マニフェスト化して管理する.
+1. operatorはhelmで導入する. tenantもhelmで管理する(minio-oerator/tenant).
 2. helmチャートは, minio-operator/operatorを使用する. minio-operator/minio-operatorは古いチャートであるため使用しない.
 
 https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-operator-helm.html
@@ -14,8 +14,7 @@ The minio-operator/minio-operator is a legacy chart and should not be installed 
 
 
 ## 設定変更
-- ingress有効化.
-
+- ingress有効化. ホスト名: minio-operator.cluster.orenet.net
 ## インストールコマンド
 ```
 helm install -n minio-operator minio-operator minio-operator/operator --vaules values.yaml
