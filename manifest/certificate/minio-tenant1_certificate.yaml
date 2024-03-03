@@ -1,0 +1,28 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio-tenant1
+  namespace: minio-tenant
+spec:
+  commonName: cluster.orenet.net
+  dnsNames:
+  - minio-tenant1.cluster.orenet.net
+  - minio-tenant1-console.cluster.orenet.net
+  - cluster.orenet.net
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: minio-tenant1
+  privateKey:
+    rotationPolicy: Always
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  renewBefore: 360h0m0s
+  secretName: minio-tenant1-cert
+  subject:
+    organizations:
+    - orenet
+  usages:
+  - digital signature
