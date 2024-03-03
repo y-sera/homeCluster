@@ -1,0 +1,26 @@
+## TiDBインストールメモ
+helm repo url: https://charts.pingcap.org/
+namespace名: tidb-operator
+helm名: tidb-operator
+
+## 方針
+1. Operatorを使用してインストールする.
+
+## 注意点
+- tidb-schedulerは無効化する. kubernetes1.16以下ではEventPodsSpread機能がなかったためtidb-schedulerが必要だったが, v1.19から該当機能がGAとなったため不要となった.
+https://docs.pingcap.com/tidb-in-kubernetes/stable/tidb-scheduler
+また, kubernetes v1.29からkubescheduler.config.k8s.io/v1bveta2, v1beta3は無効化し, v1のみとなったため, schedulerは無効化しないとpodが異常終了する.(v1.5.3以降はデフォルトで無効化になるはず)
+https://github.com/pingcap/tidb-operator/pull/5458/commits/6dfefd89bb12018c3900e73cd8db7253f630c999
+- Operatorを導入する前にCRDをインストールする.
+kubectl create -f https://raw.githubusercontent.com/pingcap/tidb-operator/v1.5.2/manifests/crd.yaml
+- Getting Startに従い, Dashboard, モニタリングサービスもインストールする. この際, dashboardはingressも実装する.
+
+## インストールコマンド
+CRDのインストール
+```
+kubectl create -f https://raw.githubusercontent.com/pingcap/tidb-operator/v1.5.2/manifests/crd.yaml
+```
+
+```
+helm upgrade -install -n tidb-operator tidb-operator --values values.yaml
+`
