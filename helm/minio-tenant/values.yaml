@@ -41,7 +41,7 @@ tenant:
   # The Tenant name
   #
   # Change this to match your preferred MinIO Tenant name.
-  name: myminio
+  name: tenant1 
   ###
   # Specify the Operator container image to use for the deployment.
   # ``image.tag`` 
@@ -99,17 +99,17 @@ tenant:
       name: pool-0
       ###
       # The number of volumes attached per MinIO Tenant Pod / Server.
-      volumesPerServer: 4
+      volumesPerServer: 3
       ###
       # The capacity per volume requested per MinIO Tenant Pod.
-      size: 10Gi
+      size: 30Gi
       ###
       # The `storageClass <https://kubernetes.io/docs/concepts/storage/storage-classes/>`__ to associate with volumes generated for this pool.
       #
       # If using Amazon Elastic Block Store (EBS) CSI driver
       # Please make sure to set xfs for "csi.storage.k8s.io/fstype" parameter under StorageClass.parameters.
       # Docs: https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/docs/parameters.md
-      storageClassName: standard
+      storageClassName: "topolvm-provisioner"
       ###
       # Specify `annotations <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`__ to associate to Tenant pods.
       annotations: { }
@@ -218,7 +218,7 @@ tenant:
     externalCertSecret: [ ]
     ###
     # Enable automatic Kubernetes based `certificate generation and signing <https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster>`__
-    requestAutoCert: true
+    requestAutoCert: false
     ###
     # This field is used only when ``requestAutoCert: true``.
     # Use this field to set CommonName for the auto-generated certificate. 
@@ -425,21 +425,29 @@ tenant:
 # Set the keys to conform to the Ingress controller and configuration of your choice.
 ingress:
   api:
-    enabled: false
-    ingressClassName: ""
+    enabled: true
+    ingressClassName: "nginx"
     labels: { }
-    annotations: { }
-    tls: [ ]
-    host: minio.local
+    annotations:
+      cert-manager.io/issuer: minio-tenant1
+    tls:
+      - secretName: minio-tenant1-cert
+        hosts:
+          - minio-tenant1.cluster.orenet.net
+    host: minio-tenant1.cluster.orenet.net
     path: /
     pathType: Prefix
   console:
-    enabled: false
-    ingressClassName: ""
+    enabled: true
+    ingressClassName: "nginx"
     labels: { }
-    annotations: { }
-    tls: [ ]
-    host: minio-console.local
+    annotations:
+      cert-manager.io/issuer: minio-tenant1
+    tls:
+      - secretName: minio-tenant1-cert
+        hosts:
+          - minio-tenant1-console.cluster.orenet.net
+    host: minio-tenant1-console.cluster.orenet.net
     path: /
     pathType: Prefix
 # Use an extraResources template section to include additional Kubernetes resources
