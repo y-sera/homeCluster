@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/issuer: tidb-dashboard
+  creationTimestamp: "2024-01-10T15:31:35Z"
+  generation: 1
+  labels:
+  name: tidb-dashboard
+  namespace: tidb-cluster
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: tidb-dashboard.cluster.orenet.net
+    http:
+      paths:
+      - backend:
+          service:
+            name: basic-tidb-dashboard-exposed
+            port:
+              number: 12333
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - tidb-dashboard.cluster.orenet.net
+    secretName: tidb-dashboard-cert
