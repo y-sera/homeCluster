@@ -5,6 +5,7 @@ helm名: tidb-operator
 
 ## 方針
 1. Operatorを使用してインストールする.
+2. AdvancedStatefulSetは後日必要性を感じたらインストールする.
 
 ## 注意点
 - tidb-schedulerは無効化する. kubernetes1.16以下ではEventPodsSpread機能がなかったためtidb-schedulerが必要だったが, v1.19から該当機能がGAとなったため不要となった.
