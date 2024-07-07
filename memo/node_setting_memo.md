@@ -20,7 +20,6 @@ vim
 dnsutils
 traceroute
 iputils-ping
-containerd
 
 ## スワップ無効化
 ```
