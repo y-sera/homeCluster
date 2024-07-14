@@ -131,4 +131,4 @@ workerノードjoin
 kubeadm join k8sapiserver.cluster.orenet.net:6443 --token cyog0z.deod4vu663zjz321 \
 	--discovery-token-ca-cert-hash sha256:cfed27d38fc34a3fa39dd627373c08cda34ca7128bf21427311b5e7095faa63c
 ```
-token切れの場合は, kubeadm token create --command-join
+token切れの場合は, kubeadm token create --print-command-join
