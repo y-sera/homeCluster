@@ -4,39 +4,32 @@ helm名: cilium
 chart名: cilium/cilium
 
 ## インストール方針
-### クラスター構築時
-values.yamlは, cilium-cliより生成されたものをベースに書き換え
-cilium-cli自体は、バイナリインストールとする.
+- kube-proxyを無効化し, eBPFベースのルーティングを使用する.
+- BGP Control Planeを使用することにより, ExternalIPをCiliumにて実装する.
+- Ingress Classもciliumを使用する. ingressに使用するLoadBalancerはsharedとする.
+- CNIをインストール後, External-DNS, Cert-manager等を導入する.
+- hubbleを有効化する. Ingressにはcert-manager用のアノテーションも付与しておく.
 
-kube-proxyを無効化し, eBPFベースのルーティングを使用する.
-CNIをインストール後, kube-vip, External-DNS, Cert-manager等を導入する.
+### カスタムリソース
+- CiliumBGPPeeringPolicy
+- CiliumLoadBalancerIPPool
+インストール後にmanifest/cilium/以下のリソースをapplyする.
 
-参考
-https://github.com/cilium/cilium-cli
+### LoadBalancerIPPool
+以下の4種類を用意する.
+- Ingress
+- apiserver
+- external-dns
+- any-pool
+
+### 注意点(v1.15.7)
+- BGPコントロールプレーンを使用する場合はdatapathを使用しないこと.
+- CiliumBGPPeeringPolicyは各ノードに2つ以上存在してはいけない.
+- VirtualRouterは各ノードに複数存在可能. ただし, LocalASNは重複してはいけない.
+- VirtualRouterにはServiceSelectorの指定が必要. これがないと経路広告されない.(任意のサービスを使用したければNotInオペレータを使用する)
+
+
+## インストール/アップグレードコマンド
 ```
-cilium install --dry-run-helm-values
+helm upgrade -i  -n kube-system cilium cilium/cilium --values values.yaml
 ```
-
-### クラスター構築後
-External-DNS/証明書を作成した後にhelmを適用し, hubbleを有効化する.
-
-
-## 変更したもの(クラスター構築時)
-```
-bpf:
-  masquerade: true
-operator:
-  replicas: 2
-```
-
-## クラスター構築時コマンド
-```
-helm install -n kube-system cilium cilium/cilium --values setup_values.yaml
-```
-
-## クラスター構築後helm更新(hubble等インストール)
-```
-helm upgrade -n kube-system cilium cilium/cilium --values values.yaml
-```
-
-
