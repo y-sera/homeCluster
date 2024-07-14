@@ -37,9 +37,9 @@ imagePullSecrets:
 # @default -- `"~/.kube/config"`
 kubeConfigPath: ""
 # -- (string) Kubernetes service host
-k8sServiceHost: ""
+k8sServiceHost: "k8sapiserver.cluster.orenet.net"
 # -- (string) Kubernetes service port
-k8sServicePort: ""
+k8sServicePort: "6443"
 
 # -- Configure the client side rate limit for the agent and operator
 #
@@ -415,7 +415,7 @@ bgp:
 # CiliumBGPPeeringPolicy CRDs.
 bgpControlPlane:
   # -- Enables the BGP control plane.
-  enabled: false
+  enabled: true
   # -- SecretsNamespace is the namespace which BGP support will retrieve secrets from.
   secretsNamespace:
     # -- Create secrets namespace for BGP secrets.
@@ -505,7 +505,7 @@ bpf:
 
   # -- (bool) Enable native IP masquerade support in eBPF
   # @default -- `false`
-  masquerade: ~
+  masquerade: true
 
   # -- (bool) Configure whether direct routing mode should route traffic via
   # host stack (true) or directly and more efficiently out of BPF (false) if
@@ -721,7 +721,7 @@ envoyConfig:
 ingressController:
   # -- Enable cilium ingress controller
   # This will automatically set enable-envoy-config as well.
-  enabled: false
+  enabled: true
 
   # -- Set cilium ingress controller to be the default ingress controller
   # This will let cilium ingress controller route entries without ingress class set
@@ -741,7 +741,7 @@ ingressController:
   enableProxyProtocol: false
 
   # -- IngressLBAnnotations are the annotation and label prefixes, which are used to filter annotations and/or labels to propagate from Ingress to the Load Balancer service
-  ingressLBAnnotationPrefixes: ['service.beta.kubernetes.io', 'service.kubernetes.io', 'cloud.google.com']
+  ingressLBAnnotationPrefixes: ['service.beta.kubernetes.io', 'service.kubernetes.io']
 
   # -- Default secret namespace for ingresses without .spec.tls[].secretName set.
   defaultSecretNamespace:
@@ -937,7 +937,7 @@ eni:
 
 externalIPs:
   # -- Enable ExternalIPs service support.
-  enabled: false
+  enabled: true
 
 # fragmentTracking enables IPv4 fragment tracking support in the datapath.
 # fragmentTracking: true
@@ -1227,7 +1227,7 @@ hubble:
 
   relay:
     # -- Enable Hubble Relay (requires hubble.enabled=true)
-    enabled: false
+    enabled: true
 
     # -- Roll out Hubble Relay pods automatically when configmap is updated.
     rollOutPods: false
@@ -1430,7 +1430,7 @@ hubble:
 
   ui:
     # -- Whether to enable the Hubble UI.
-    enabled: false
+    enabled: true
 
     standalone:
       # -- When true, it will allow installing the Hubble UI only, without checking dependencies.
@@ -1785,7 +1785,7 @@ readinessProbe:
 # -- Configure the kube-proxy replacement in Cilium BPF datapath
 # Valid options are "true", "false", "disabled" (deprecated), "partial" (deprecated), "strict" (deprecated).
 # ref: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/
-#kubeProxyReplacement: "false"
+kubeProxyReplacement: "true"
 
 # -- healthz server bind address for the kube-proxy replacement.
 # To enable set the value to '0.0.0.0:10256' for all ipv4
@@ -3064,7 +3064,6 @@ clustermesh:
 
       # -- The internalTrafficPolicy of service used for apiserver access.
       internalTrafficPolicy:
-
       # @schema
       # type: [null, string]
       # @schema
