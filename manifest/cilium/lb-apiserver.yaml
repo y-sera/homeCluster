@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apiserver
+  namespace: kube-system
+  labels:
+    lbpool: apiserver
+spec:
+  type: LoadBalancer
+  loadBalancerClass: io.cilium/bgp-control-plane
+  ports:
+  - port: 6443
+    targetPort: 6443
+    protocol: TCP
+    name: apiserver
+  selector:
+    svc: kubernetes.default.svc.cluster.local
