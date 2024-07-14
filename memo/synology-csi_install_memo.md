@@ -59,5 +59,5 @@ stringData:
 
 ## インストールコマンド
 ```
-helm install synology-csi synology-csi-chart/synology-csi -n synology-csi --values values.yaml
+helm upgrade -i synology-csi synology-csi-chart/synology-csi -n synology-csi --values values.yaml
 ```
