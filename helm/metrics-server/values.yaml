@@ -76,6 +76,8 @@ hostNetwork:
 
 replicas: 1
 
+revisionHistoryLimit:
+
 updateStrategy: {}
 #   type: RollingUpdate
 #   rollingUpdate:
@@ -93,7 +95,6 @@ defaultArgs:
   - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
   - --kubelet-use-node-status-port
   - --metric-resolution=15s
-  - --kubelet-insecure-tls
 
 args: []
 
@@ -128,7 +129,17 @@ addonResizer:
   enabled: false
   image:
     repository: registry.k8s.io/autoscaling/addon-resizer
-    tag: 1.8.19
+    tag: 1.8.20
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
   resources:
     requests:
       cpu: 40m
@@ -146,7 +157,7 @@ addonResizer:
     threshold: 5
 
 metrics:
-  enabled: true
+  enabled: false
 
 serviceMonitor:
   enabled: false
@@ -177,8 +188,13 @@ affinity: {}
 
 topologySpreadConstraints: []
 
+dnsConfig: {}
+
 # Annotations to add to the deployment
 deploymentAnnotations: {}
 
 schedulerName: ""
+
+tmpVolume:
+  emptyDir: {}
 
