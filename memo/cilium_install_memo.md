@@ -9,6 +9,7 @@ chart名: cilium/cilium
 - Ingress Classもciliumを使用する. ingressに使用するLoadBalancerはsharedとする.
 - CNIをインストール後, External-DNS, Cert-manager等を導入する.
 - hubbleを有効化する. Ingressにはcert-manager用のアノテーションも付与しておく.
+- v1.15.7時点において, kube-apiserverの冗長化はkube-vipを使用する. 将来的にciliumが対応したらそちらに移行する.
 
 ### カスタムリソース
 - CiliumBGPPeeringPolicy
