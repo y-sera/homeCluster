@@ -2,27 +2,20 @@
 namespace: kube-system
 name: metrics-server
 
-kubernetes-dashboardやその他chartでも参照されるので、
-保守性の観点から、独立してインストールする。
+kubernetes-dashboardやその他chartでも参照されるので, 
+管理を楽にするために個別のchartでインストールする.
 
 ## 設定変更点
-helm Chart パラメータ説明
-https://github.com/kubernetes-sigs/metrics-server/tree/master/charts/metrics-server
+なし
 
+## その他注意点
+--kubelet-insecure-tlsオプションを使用しないために, kubeletのサーバ証明書をCA署名する.
+参考リンク
+https://github.com/kubernetes-sigs/metrics-server/issues/576#issuecomment-1820504816
 
-変数に以下を追加
-```
---kubelet-insecure-tls
-```
-
-認証無しで/metricsにアクセス出来る.(なんとなくtrueに.多分いらない.)
-```
-metrics:
-  enabled: true
-```
 
 ## インストールコマンド
 ```
-helm install -n kube-system metrics-server metrics-server/metrics-server --values values.yaml
+helm upgrade -i -n kube-system metrics-server metrics-server/metrics-server --values values.yaml
 ```
 
