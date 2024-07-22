@@ -155,16 +155,16 @@ auth:
   client:
     ## @param auth.client.secureTransport Switch to encrypt client-to-server communications using TLS certificates
     ##
-    secureTransport: true
+    secureTransport: false
     ## @param auth.client.useAutoTLS Switch to automatically create the TLS certificates
     ##
-    useAutoTLS: true
+    useAutoTLS: false
     ## @param auth.client.existingSecret Name of the existing secret containing the TLS certificates for client-to-server communications
     ##
-    existingSecret: "etcd-client-cert"
+    existingSecret: ""
     ## @param auth.client.enableAuthentication Switch to enable host authentication using TLS certificates. Requires existing secret
     ##
-    enableAuthentication: true
+    enableAuthentication: false
     ## @param auth.client.certFilename Name of the file containing the client certificate
     ##
     certFilename: tls.crt
@@ -187,20 +187,20 @@ auth:
     useAutoTLS: true
     ## @param auth.peer.existingSecret Name of the existing secret containing the TLS certificates for server-to-server communications
     ##
-    existingSecret: "etcd-peer-cert"
+    existingSecret: ""
     ## @param auth.peer.enableAuthentication Switch to enable host authentication using TLS certificates. Requires existing secret
     ##
-    enableAuthentication: true
+    enableAuthentication: false
     ## @param auth.peer.certFilename Name of the file containing the peer certificate
     ##
-    certFilename: tls.crt
+    certFilename: cert.pem
     ## @param auth.peer.certKeyFilename Name of the file containing the peer certificate private key
     ##
-    certKeyFilename: tls.key
+    certKeyFilename: key.pem
     ## @param auth.peer.caFilename Name of the file containing the peer CA certificate
     ## If not specified and `auth.peer.enableAuthentication=true` or `rbac.enabled=true`, the default is is `ca.crt`
     ##
-    caFilename: "ca.crt"
+    caFilename: ""
 ## @param autoCompactionMode Auto compaction mode, by default periodic. Valid values: "periodic", "revision".
 ## - 'periodic' for duration based retention, defaulting to hours if no time unit is provided (e.g. 5m).
 ## - 'revision' for revision number based retention.
