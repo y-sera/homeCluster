@@ -155,52 +155,52 @@ auth:
   client:
     ## @param auth.client.secureTransport Switch to encrypt client-to-server communications using TLS certificates
     ##
-    secureTransport: false
+    secureTransport: true
     ## @param auth.client.useAutoTLS Switch to automatically create the TLS certificates
     ##
-    useAutoTLS: false
+    useAutoTLS: true
     ## @param auth.client.existingSecret Name of the existing secret containing the TLS certificates for client-to-server communications
     ##
-    existingSecret: ""
+    existingSecret: "etcd-client-cert"
     ## @param auth.client.enableAuthentication Switch to enable host authentication using TLS certificates. Requires existing secret
     ##
-    enableAuthentication: false
+    enableAuthentication: true
     ## @param auth.client.certFilename Name of the file containing the client certificate
     ##
-    certFilename: cert.pem
+    certFilename: tls.crt
     ## @param auth.client.certKeyFilename Name of the file containing the client certificate private key
     ##
-    certKeyFilename: key.pem
+    certKeyFilename: tls.key
     ## @param auth.client.caFilename Name of the file containing the client CA certificate
     ## If not specified and `auth.client.enableAuthentication=true` or `auth.rbac.enabled=true`, the default is is `ca.crt`
     ##
-    caFilename: ""
+    caFilename: "ca.crt"
   ## TLS authentication for server-to-server communications
   ## ref: https://etcd.io/docs/current/op-guide/security/
   ##
   peer:
     ## @param auth.peer.secureTransport Switch to encrypt server-to-server communications using TLS certificates
     ##
-    secureTransport: false
+    secureTransport: true
     ## @param auth.peer.useAutoTLS Switch to automatically create the TLS certificates
     ##
-    useAutoTLS: false
+    useAutoTLS: true
     ## @param auth.peer.existingSecret Name of the existing secret containing the TLS certificates for server-to-server communications
     ##
-    existingSecret: ""
+    existingSecret: "etcd-peer-cert"
     ## @param auth.peer.enableAuthentication Switch to enable host authentication using TLS certificates. Requires existing secret
     ##
-    enableAuthentication: false
+    enableAuthentication: true
     ## @param auth.peer.certFilename Name of the file containing the peer certificate
     ##
-    certFilename: cert.pem
+    certFilename: tls.crt
     ## @param auth.peer.certKeyFilename Name of the file containing the peer certificate private key
     ##
-    certKeyFilename: key.pem
+    certKeyFilename: tls.key
     ## @param auth.peer.caFilename Name of the file containing the peer CA certificate
     ## If not specified and `auth.peer.enableAuthentication=true` or `rbac.enabled=true`, the default is is `ca.crt`
     ##
-    caFilename: ""
+    caFilename: "ca.crt"
 ## @param autoCompactionMode Auto compaction mode, by default periodic. Valid values: "periodic", "revision".
 ## - 'periodic' for duration based retention, defaulting to hours if no time unit is provided (e.g. 5m).
 ## - 'revision' for revision number based retention.
@@ -269,7 +269,7 @@ args: []
 
 ## @param replicaCount Number of etcd replicas to deploy
 ##
-replicaCount: 1
+replicaCount: 3
 ## Update strategy
 ## ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 ## @param updateStrategy.type Update strategy type, can be set to RollingUpdate or OnDelete.
@@ -634,7 +634,7 @@ persistence:
   ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
   ##   GKE, AWS & OpenStack)
   ##
-  storageClass: ""
+  storageClass: "synology-csi-delete"
   ##
   ## @param persistence.annotations [object] Annotations for the PVC
   ##
@@ -923,7 +923,7 @@ disasterRecovery:
     size: 2Gi
     ## @param disasterRecovery.pvc.storageClassName Storage Class for snapshots volume
     ##
-    storageClassName: nfs
+    storageClassName: "synology-csi-delete" 
     ## @param disasterRecovery.pvc.subPath Path within the volume from which to mount
     ## Useful if snapshots should only be stored in a subdirectory of the volume
     ##
