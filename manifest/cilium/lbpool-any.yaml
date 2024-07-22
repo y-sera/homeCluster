@@ -10,4 +10,4 @@ spec:
   serviceSelector:
     matchExpressions:
          - {key: somekey, operator: NotIn, values: ['never-used-value']}
-
+         - {key: lbpool, operator: DoesNotExist}
