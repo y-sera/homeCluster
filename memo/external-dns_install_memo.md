@@ -10,5 +10,5 @@ env:
 
 インストールコマンド
 ```
-helm install external-dns external-dns/external-dns --namespace external-dns --values values.yaml
+helm upgrade -i -n external-dns external-dns external-dns/external-dns --values values.yaml
 ```
