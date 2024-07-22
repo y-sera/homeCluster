@@ -34,7 +34,7 @@ terminationGracePeriodSeconds: 30
 podAnnotations: {}
 #  cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
 
-serviceType: "LoadBalancer"
+serviceType: "ClusterIP"
 
 prometheus:
   service:
@@ -42,24 +42,27 @@ prometheus:
     annotations:
       prometheus.io/scrape: "true"
       prometheus.io/port: "9153"
+    selector: {}
   monitor:
     enabled: false
     additionalLabels: {}
     namespace: ""
     interval: ""
+    selector: {}
 
 service:
 # clusterIP: ""
 # clusterIPs: []
 # loadBalancerIP: ""
-  externalIPs:
-  - "192.168.1.64"
+# externalIPs: []
 # externalTrafficPolicy: ""
 # ipFamilyPolicy: ""
   # The name of the Service
   # If not set, a name is generated using the fullname template
   name: ""
   annotations: {}
+  # Pod selector
+  selector: {}
 
 serviceAccount:
   create: false
@@ -78,7 +81,7 @@ rbac:
   # name:
 
 # isClusterService specifies whether chart should be deployed as cluster-service or normal k8s app.
-isClusterService: false 
+isClusterService: true
 
 # Optional priority class to be used for the coredns pods. Used for autoscaler if autoscaler.priorityClassName not set.
 priorityClassName: ""
@@ -97,17 +100,7 @@ securityContext:
 # https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/#coredns-configmap-options
 servers:
 - zones:
-  - zone: k8sapiserver.cluster.orenet.net
-  port: 53
-  plugins:
-  - name: forward
-    parameters: . 192.168.1.161
-  - name: errors
-  - name: cache 
-    parameter: 30
-
-- zones:
-  - zone: cluster.orenet.net 
+  - zone: .
   port: 53
   # If serviceType is nodePort you can specify nodePort here
   # nodePort: 30053
@@ -127,32 +120,16 @@ servers:
       pods insecure
       fallthrough in-addr.arpa ip6.arpa
       ttl 30
-  - name: forward
-    parameters: . 192.168.1.161
   # Serves a /metrics endpoint on :9153, required for serviceMonitor
   - name: prometheus
     parameters: 0.0.0.0:9153
+  - name: forward
+    parameters: . /etc/resolv.conf
   - name: cache
     parameters: 30
   - name: loop
   - name: reload
   - name: loadbalance
-  - name: etcd
-    parameters: cluster.orenet.net
-    configBlock: |-
-      stubzones
-      path /skydns
-      endpoint http://external-dns-backend-etcd.external-dns-backend.svc.cluster.local:2379
-
-- zones:
-  - zone: .
-  port: 53
-  plugins:
-  - name: forward
-    parameters: . 192.168.1.161
-  - name: errors
-  - name: cache 
-    parameter: 30
 
 # Complete example with all the options:
 # - zones:                 # the `zones` block can be left out entirely, defaults to "."
@@ -399,8 +376,11 @@ autoscaler:
   #   imagePullPolicy: Always
 
 deployment:
+  skipConfig: false
   enabled: true
   name: ""
   ## Annotations for the coredns deployment
   annotations: {}
+  ## Pod selector
+  selector: {}
 
