@@ -5,9 +5,9 @@ cert:
   caDurationDays: 1000
   client:
     enabled: true
-    secretName: etcd-client-cert
+    secretName: etcd-client-certs
     durationDays: 1000
   peer:
-    enabled: true
-    secretName: etcd-peer-cert
+    enabled: false
+    secretName: etcd-peer-certs
     durationDays: 1000
