@@ -1,8 +1,7 @@
 apiVersion: cert-manager.io/v1
-kind: Issuer
+kind: ClusterIssuer
 metadata:
-  name: minio-operator
-  namespace: minio-operator
+  name: letsencrypt
 spec:
   acme:
     # You must replace this email address with your own.
@@ -13,7 +12,7 @@ spec:
     # server: https://acme-staging-v02.api.letsencrypt.org/directory
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
-      name: issuer-minio-operator-key
+      name: clusterissuer-key
     solvers:
     - selector:
         dnsZones:
