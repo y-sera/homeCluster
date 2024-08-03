@@ -1,4 +1,4 @@
 .sops.yaml
-manifest/certificate/*secrets.yaml
+manifest/clusterissuer/*secrets.yaml
 manifest/synology-csi/*secrets.yaml
 manifest/vault/*secrets.yaml
