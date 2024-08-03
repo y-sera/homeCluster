@@ -1617,12 +1617,6 @@ hubble:
     ingress:
       enabled: true
       annotations:
-        cert-manager.io/cluster-issuer: letsencrypt-prod
-        cert-manager.io/common-name: cluster.orenet.net
-        cert-manager.io/subject-countries: "Japan"
-        cert-manager.io/duration: "2160h"
-        cert-manager.io/renewBefore: "360h0m0s"
-        cert-manager.io/private-key-rotation-policy: Always
         # kubernetes.io/ingress.class: nginx
         # kubernetes.io/tls-acme: "true"
       className: "cilium"
@@ -1630,7 +1624,7 @@ hubble:
         - hubble.cluster.orenet.net
       labels: {}
       tls:
-       - secretName: hubble-tls
+       - secretName: hubble-cert
          hosts:
            - hubble.cluster.orenet.net
 
