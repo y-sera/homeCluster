@@ -1,13 +1,20 @@
 annotations: {}
 cert:
   commonName: etcd
-  caName: etcd-ca
+  caName: etcd
   caDurationDays: 1000
   client:
     enabled: true
+    commonName: etcd-client
     secretName: etcd-client-certs
     durationDays: 1000
+  server:
+    enabled: true
+    commonName: etcd
+    secretName: etcd-server-certs
+    durationDays: 1000
   peer:
-    enabled: false
+    enabled: true
+    commonName: etcd
     secretName: etcd-peer-certs
     durationDays: 1000
