@@ -9,7 +9,8 @@
 
 ## @param global.imageRegistry Global Docker image registry
 ## @param global.imagePullSecrets [array] Global Docker registry secret names as an array
-## @param global.storageClass Global StorageClass for Persistent Volume(s)
+## @param global.defaultStorageClass Global default StorageClass for Persistent Volume(s)
+## @param global.storageClass DEPRECATED: use global.defaultStorageClass instead
 ##
 global:
   imageRegistry: ""
@@ -18,6 +19,7 @@ global:
   ##   - myRegistryKeySecretName
   ##
   imagePullSecrets: []
+  defaultStorageClass: ""
   storageClass: ""
   ## Compatibility adaptations for Kubernetes platforms
   ##
@@ -79,7 +81,7 @@ diagnosticMode:
 image:
   registry: docker.io
   repository: bitnami/etcd
-  tag: 3.5.14-debian-12-r4
+  tag: 3.5.15-debian-12-r5
   digest: ""
   ## @param image.pullPolicy etcd image pull policy
   ## Specify a imagePullPolicy
@@ -109,7 +111,7 @@ auth:
   rbac:
     ## @param auth.rbac.create Switch to enable RBAC authentication
     ##
-    create: true
+    create: false
     ## @param auth.rbac.allowNoneAuthentication Allow to use etcd without configuring RBAC authentication
     ##
     allowNoneAuthentication: true
@@ -167,24 +169,24 @@ auth:
     enableAuthentication: false
     ## @param auth.client.certFilename Name of the file containing the client certificate
     ##
-    certFilename: tls.crt
+    certFilename: cert.pem
     ## @param auth.client.certKeyFilename Name of the file containing the client certificate private key
     ##
-    certKeyFilename: tls.key
+    certKeyFilename: key.pem
     ## @param auth.client.caFilename Name of the file containing the client CA certificate
     ## If not specified and `auth.client.enableAuthentication=true` or `auth.rbac.enabled=true`, the default is is `ca.crt`
     ##
-    caFilename: "ca.crt"
+    caFilename: ""
   ## TLS authentication for server-to-server communications
   ## ref: https://etcd.io/docs/current/op-guide/security/
   ##
   peer:
     ## @param auth.peer.secureTransport Switch to encrypt server-to-server communications using TLS certificates
     ##
-    secureTransport: true
+    secureTransport: false
     ## @param auth.peer.useAutoTLS Switch to automatically create the TLS certificates
     ##
-    useAutoTLS: true
+    useAutoTLS: false
     ## @param auth.peer.existingSecret Name of the existing secret containing the TLS certificates for server-to-server communications
     ##
     existingSecret: ""
@@ -269,7 +271,7 @@ args: []
 
 ## @param replicaCount Number of etcd replicas to deploy
 ##
-replicaCount: 3
+replicaCount: 1
 ## Update strategy
 ## ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 ## @param updateStrategy.type Update strategy type, can be set to RollingUpdate or OnDelete.
@@ -671,7 +673,7 @@ volumePermissions:
   image:
     registry: docker.io
     repository: bitnami/os-shell
-    tag: 12-debian-12-r24
+    tag: 12-debian-12-r26
     digest: ""
     ## @param volumePermissions.image.pullPolicy Init container volume-permissions image pull policy
     ##
