@@ -207,7 +207,7 @@ sources:
   - ingress
 
 # -- How DNS records are synchronized between sources and providers; available values are `sync` & `upsert-only`.
-policy: upsert-only
+policy: sync
 
 # -- Specify the registry for storing ownership and labels.
 # Valid values are `txt`, `aws-sd`, `dynamodb` & `noop`.
