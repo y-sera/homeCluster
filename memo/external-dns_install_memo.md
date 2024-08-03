@@ -7,8 +7,12 @@ provider: coredns
 env:
 - name: ETCD_URLS
 - value: coredns-backend-etcd用serviceのDNS名
+policy: sync
 
-インストールコマンド
+## 備考
+hubbleなど, 先に導入したコンポーネントも更新できるようにpolicyをsyncとしておく.
+
+## インストールコマンド
 ```
 helm upgrade -i -n external-dns external-dns external-dns/external-dns --values values.yaml
 ```
