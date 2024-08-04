@@ -12,9 +12,10 @@ helm名: argocd
 4. ロマン重視でHA構成&autoscaleを有効化(redis-ha有効化など) 将来的に見直しの可能性あり.(参考: https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/README.md)
 
 ## 設定変更
-- crds.keep = false: helmアンインストール時crdを削除するように変更
-- ingress周りの設定. sslパススルーするannotation追加.(https://argo-cd.readthedocs.io/en/stable/operator-manual/ingress/#ssl-passthrough-with-cert-manager-and-lets-encrypt)
-
+- ingress周りの設定. sslパススルーするannotation追加.
+(https://argo-cd.readthedocs.io/en/stable/operator-manual/ingress/#ssl-passthrough-with-cert-manager-and-lets-encrypt)
+https://docs.cilium.io/en/latest/network/servicemesh/ingress/
+ingress.cilium.io/tls-passthrough: enabled
 
 ## インストールコマンド
 ```
