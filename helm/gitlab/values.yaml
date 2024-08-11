@@ -51,7 +51,7 @@ global:
   edition: ee
 
   ## https://docs.gitlab.com/charts/charts/globals#gitlab-version
-  gitlabVersion: "16.7.0"
+  gitlabVersion: "17.2.1"
 
   ## https://docs.gitlab.com/charts/charts/globals#application-resource
   application:
@@ -64,7 +64,7 @@ global:
     hostSuffix:
     https: true
     externalIP:
-    ssh: ~
+    ssh:
     gitlab: {}
     minio: {}
     registry: {}
@@ -77,10 +77,10 @@ global:
   ingress:
     apiVersion: ""
     configureCertmanager: false
-    provider: nginx
-    class: "nginx"
-    annotations:
-      cert-manager.io/issuer: gitlab
+    useNewIngressForCerts: false
+    provider: cilium
+    class: "cilium"
+    annotations: {}
     enabled: true
     tls:
       enabled: true
@@ -173,6 +173,10 @@ global:
     # sentinels:
     #   - host:
     #     port:
+    sentinelAuth:
+      enabled: false
+      # secret:
+      # key:
 
   ## https://docs.gitlab.com/charts/charts/globals#configure-gitaly-settings
   gitaly:
@@ -284,6 +288,9 @@ global:
       ## Periodically clean up stale ci_runner_machines records
       # ci_runners_stale_machines_cleanup_worker:
       #   cron: "36 * * * *"
+      # ci_click_house_finished_pipelines_sync_worker:
+      #   cron: "*/4 * * * *"
+      #   args: [0, 1]
       ### GitLab Geo
       # Geo Primary only!
       # geo_prune_event_log_worker:
@@ -564,7 +571,7 @@ global:
     ## Geo Secondary only
     # nodeName allows multiple instances behind a load balancer.
     nodeName: # defaults to `gitlab.gitlab.host`
-    # ingressClass: 
+    # ingressClass:
     # PostgreSQL connection details only needed for `secondary`
     psql:
       password: {}
@@ -621,6 +628,8 @@ global:
   rails:
     bootsnap: # Enable / disable Shopify/Bootsnap cache
       enabled: true
+    sessionStore:
+      sessionCookieTokenPrefix: ""
 
   ## https://docs.gitlab.com/charts/charts/globals#configure-registry-settings
   registry:
@@ -640,13 +649,16 @@ global:
     redis:
       cache:
         password: {}
+      rateLimiting:
+        password: {}
     # https://docs.docker.com/registry/notifications/#configuration
     notifications: {}
       # endpoints:
       #   - name: FooListener
       #     url: https://foolistener.com/event
       #     timeout: 500ms
-      #     threshold: 10
+      #     threshold: 10 # DEPRECATED: use maxretries instead https://gitlab.com/gitlab-org/container-registry/-/issues/1243.
+      #     maxretries: 5
       #     backoff: 1s
       #     headers:
       #       FooBar: ['1', '2']
@@ -693,6 +705,7 @@ global:
     authSecret: {}
       # secret:
       # key:
+    namespaceInPath: false
 
   ## GitLab Runner
   ## Secret created according to https://docs.gitlab.com/charts/installation/secrets#gitlab-runner-secret
@@ -745,10 +758,19 @@ global:
   deployment:
     annotations: {}
 
+
+  # Setting a global nodeAffinity only applies to the registry chart for now.
+  # See issue https://gitlab.com/gitlab-com/gl-infra/production-engineering/-/issues/25403 for more information
+
+  nodeAffinity:
+
   antiAffinity: soft
   affinity:
     podAntiAffinity:
       topologyKey: "kubernetes.io/hostname"
+    nodeAffinity:
+      key: topology.kubernetes.io/zone
+      values: []
 
   # Priority class assigned to pods, may be overridden for individual components
   # https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
@@ -856,6 +878,10 @@ global:
   #       name: useful-config
   #       key: some-string
   #       # optional: boolean
+
+  ## https://docs.gitlab.com/charts/charts/globals/#jobs
+  job:
+    nameSuffixOverride:
 ## End of global
 
 upgradeCheck:
@@ -878,10 +904,10 @@ upgradeCheck:
   priorityClassName: ""
 
 ## Settings to for the Let's Encrypt ACME Issuer
-certmanager-issuer:
+# certmanager-issuer:
 #   # The email address to register certificates requested from Let's Encrypt.
 #   # Required if using Let's Encrypt.
-  email: email@example.com
+#   email: email@example.com
 
 ## Installation & configuration of jetstack/cert-manager
 ## See requirements.yaml for current version
@@ -1155,7 +1181,7 @@ redis:
   metrics:
     enabled: true
 
-## Installation & configuration of stable/prostgresql
+## Installation & configuration of stable/postgresql
 ## See requirements.yaml for current version
 postgresql:
   install: true
@@ -1310,7 +1336,7 @@ gitlab-zoekt:
       secretName: '{{ include "gitlab.zoekt.gateway.basicAuth.secretName" $ }}'
   indexer:
     internalApi:
-      enabled: false
+      enabled: true
       secretName: '{{ include "gitlab.zoekt.indexer.internalApi.secretName" $ }}'
       secretKey: '{{ include "gitlab.zoekt.indexer.internalApi.secretKey" $ }}'
       gitlabUrl: '{{ include "gitlab.zoekt.indexer.internalApi.gitlabUrl" $ }}'
