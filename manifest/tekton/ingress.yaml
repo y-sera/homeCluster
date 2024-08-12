@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+  name: tekton-dashboard
+  namespace: tekton-pipelines
+spec:
+  ingressClassName: cilium
+  rules:
+  - host: tekton.cluster.orenet.net
+    http:
+      paths:
+      - backend:
+          service:
+            name: tekton-dashboard
+            port:
+              number: 9097
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - tekton.cluster.orenet.net
+    secretName: tekton-cert
