@@ -11,8 +11,8 @@ spec:
   duration: 2160h0m0s
   issuerRef:
     group: cert-manager.io
-    kind: Issuer
-    name: vault 
+    kind: ClusterIssuer
+    name: letsencrypt
   privateKey:
     rotationPolicy: Always
     algorithm: RSA
