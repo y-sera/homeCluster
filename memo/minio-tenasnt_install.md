@@ -5,8 +5,9 @@ chart名: minio-operator/tenant
 
 ## 方針
 1. tenantはhelmで管理する(minio-oerator/tenant).
-2. ストレージクラスは, 一旦topolvmベースで30GB x12確保で様子を見る. 
-   今後必要に応じて容量は増やしていく
+2. ストレージクラスをsynology-csi-deleteを利用しようとしたが, うまく行かなかったため一旦諦め.
+   各ノードに導入するdirectpvを利用する方向で後日検討する.(kubectl krew経由)
+   https://github.com/minio/directpv/blob/master/docs/installation.md
 3. テナント名は, 今後増やしていくことを想定しtenant1とする(ただし, namespace名は一旦ナンバリングは振らないでおく). 
    名前やインストール先についても今後必要に応じて検討する.
 
