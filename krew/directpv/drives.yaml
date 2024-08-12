@@ -1,0 +1,124 @@
+version: v1
+nodes:
+    - name: worker1
+      drives:
+        - id: 8:32$Tb2CZyWjufBAVKEuD0c5ObmKGANgkAwvvHAa09N5mDc=
+          name: sdc
+          size: 5368709120
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:112$u0RaWtsmU/ZUBmwDM38QbnI08oLs32ZJmY4eqZFC+Kg=
+          name: sdh
+          size: 10737418240
+          make: SYNOLOGY Storage
+          select: "no"
+        - id: 8:144$uoWfwiByvv0U3bErEnmUmVlLY+ktA8x+pLDYFh9CsvE=
+          name: sdj
+          size: 322122547200
+          make: QEMU QEMU_HARDDISK
+          select: "yes"
+        - id: 8:16$V6HrZhBJcSVNp/jg5Zj/R0WLXtbaZL3pnezz1LAkkLs=
+          name: sdb
+          size: 8589934592
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:80$S6e2irVElNjVg2wQ5XTK9ypAKf8O7KbNYJjVcdNTIF0=
+          name: sdf
+          size: 1073741824
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:48$y9cC9S9lTdAnoVO7Zi9PGh/PwcKFvZ0+h4yWLTIcUR8=
+          name: sdd
+          size: 1073741824
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+    - name: worker2
+      drives:
+        - id: 8:48$ip/AosCcvP+Ihl4a7Zia3gWH6TVVJBjPTuOCb5RC6as=
+          name: sdd
+          size: 1073741824
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:176$s4bYayHCOpWC05k9WopciATJ14k+VCvFy7IGLUvB0MY=
+          name: sdl
+          size: 10737418240
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:144$Q4O8Yce0n2BbyI7XXoknnnwqq3x2SOHMALMh+uKNcj8=
+          name: sdj
+          size: 10737418240
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:64$aTo6mU4Dxd3HtvTbNrezPAd9wsm6tBC4RRwvz+2EDB8=
+          name: sde
+          size: 322122547200
+          make: QEMU QEMU_HARDDISK
+          select: "yes"
+        - id: 8:32$c0CuHxPl2iZU/v4/2TVjquZSzgK1ENLEA/wErhwnCy4=
+          name: sdc
+          size: 8589934592
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:16$wVQwNoegj+kyORDR3sdb+PSeD8rGJbHDvXNAZXvYJs4=
+          name: sdb
+          size: 1073741824
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:128$kMTbLr3XtHO6XyPtcVAtBWk1wLdnVqMZOC6CJ/OALwE=
+          name: sdi
+          size: 10737418240
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+    - name: worker3
+      drives:
+        - id: 8:112$B2MtpzG0aoYdVyB0ACLhDvYbnlj0HR+9S+RgeDJquT8=
+          name: sdh
+          size: 10737418240
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:48$p2AQkHsGAN7Z3FMryZ8AqyeHW/BlIYWypzi/UvTEH1Y=
+          name: sdd
+          size: 53687091200
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:96$2K5ha05W0XM4HLf/dsKN49dHPe4zwcq3P2pzr0q8LSc=
+          name: sdg
+          size: 8589934592
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:144$MKH/NODe++WknwzuASNFQC0uMavfiJ4YVs5rDa72Blk=
+          name: sdj
+          size: 322122547200
+          make: QEMU QEMU_HARDDISK
+          select: "yes"
+        - id: 8:16$TnuDHEeoSYxO6vfW4QOFSyIp/qYIFZ2e8IsvrLw96BY=
+          name: sdb
+          size: 5368709120
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:64$flbvpJ+w2O+DYhVqrQrKMo8KLHPejnkQIE6R4JdZoLw=
+          name: sde
+          size: 8589934592
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"
+        - id: 8:80$/1Cj58WItc5GFe7ubx2AcVlq1dkCcg1WLClsGEYrURU=
+          name: sdf
+          size: 10737418240
+          make: SYNOLOGY Storage
+          fs: btrfs
+          select: "no"

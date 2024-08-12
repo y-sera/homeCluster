@@ -1,0 +1,18 @@
+# directpvインストールメモ
+## 概要
+directpvとはminio専用のcsiドライバー. 
+
+## 参考手順
+こちらのドキュメントに従う
+- https://github.com/minio/directpv/blob/master/docs/installation.md
+- https://github.com/minio/directpv/blob/master/docs/drive-management.md#add-drives
+
+## インストールメモ
+1. 各workerノードに300GBのハードディスクを追加する.
+2. kubectl krew update
+3. kubectl krew install directpv
+4. kubectl directpv install
+5. kubectl directpv discoverで, 各workerノードのパーティション一覧を出力する.(drives.yaml)
+6. drives.yamlの中から, directpvで使用するパーティションのみ, selectの項目をyesにする.
+7. kubectl directpv init drives.yaml --dangerous を実行. 
+8. 以降, minioのテナントを作成する.
