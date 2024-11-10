@@ -51,7 +51,7 @@ global:
   edition: ee
 
   ## https://docs.gitlab.com/charts/charts/globals#gitlab-version
-  gitlabVersion: "17.2.1"
+  gitlabVersion: "17.5.1"
 
   ## https://docs.gitlab.com/charts/charts/globals#application-resource
   application:
@@ -167,6 +167,9 @@ global:
       enabled: true
       # secret:
       # key:
+    # connectTimeout: 1
+    # readTimeout: 1
+    # writeTimeout: 1
     # host: redis.hostedsomewhere.else
     # port: 6379
     # user: webservice
@@ -244,6 +247,8 @@ global:
     usernameChangingEnabled: true
     issueClosingPattern:
     defaultTheme:
+    defaultColorMode: 
+    defaultSyntaxHighlightingTheme: 
     defaultProjectsFeatures:
       issues: true
       mergeRequests: true
@@ -825,6 +830,8 @@ global:
       # in most base images, this is `nobody:nogroup`
       runAsUser: 65534
       fsGroup: 65534
+      seccompProfile:
+        type: "RuntimeDefault"
   gitlabBase:
     image:
       repository: registry.gitlab.com/gitlab-org/build/cng/gitlab-base
@@ -839,6 +846,7 @@ global:
     enabled: false
     create: true
     annotations: {}
+    automountServiceAccountToken: false
     ## Name to be used for serviceAccount, otherwise defaults to chart fullname
     # name:
 
@@ -882,6 +890,10 @@ global:
   ## https://docs.gitlab.com/charts/charts/globals/#jobs
   job:
     nameSuffixOverride:
+
+  traefik:
+    apiVersion: "" # newer apiVersion: "traefik.io/v1alpha1"
+
 ## End of global
 
 upgradeCheck:
@@ -895,6 +907,15 @@ upgradeCheck:
     # in alpine/debian/busybox based images, this is `nobody:nogroup`
     runAsUser: 65534
     fsGroup: 65534
+    seccompProfile:
+      type: "RuntimeDefault"
+  ## Allow to overwrite the specific security context under which the container is running.
+  containerSecurityContext:
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop: [ "ALL" ]
   tolerations: []
   annotations: {}
   configMapAnnotations: {}
@@ -1042,6 +1063,26 @@ prometheus:
       type: Recreate
     image:
       tag: v2.38.0
+    containerSecurityContext:
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop: [ "ALL" ]
+      seccompProfile:
+        type: "RuntimeDefault"
+  podSecurityPolicy:
+    enabled: false
+  configmapReload:
+    prometheus:
+      containerSecurityContext:
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop: [ "ALL" ]
+        seccompProfile:
+          type: "RuntimeDefault"
   serverFiles:
     prometheus.yml:
       scrape_configs:
@@ -1255,6 +1296,13 @@ shared-secrets:
     # in debian/alpine based images, this is `nobody:nogroup`
     runAsUser: 65534
     fsGroup: 65534
+    seccompProfile:
+      type: "RuntimeDefault"
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop: [ "ALL" ]
   tolerations: []
   podLabels: {}
   annotations: {}
@@ -1288,6 +1336,9 @@ gitlab-runner:
   podAnnotations:
     gitlab.com/prometheus_scrape: "true"
     gitlab.com/prometheus_port: 9252
+  podSecurityContext:
+    seccompProfile:
+      type: "RuntimeDefault"
 
 traefik:
   install: false
