@@ -6,11 +6,13 @@ helm名: synology-csi
 ## 方針
 ログイン関係のシークレット情報は, helm管理対象外とする.
 ブロックストレージはhelmにて標準実装されている2種類のストレージクラスを提供する.
+ボリュームはvolume2を使用する.
 - synology-csi-delete 
 - synology-csi-retain
-ファイルストレージは, smbプロトコルを用いてsynology-csiの機能の中で提供する.
-- synology-csi-smb-delete
-- synology-csi-smb-retain
+ファイルストレージは, nfsプロトコルを用いてsynology-csiの機能の中で提供する.
+ボリュームはvolume3を使用する.
+- synology-csi-nfs-delete
+- synology-csi-nfs-retain
 
 defaultストレージクラスは, synology-csi-deleteとする.
 これは, PVCを削除すれば自動でLUNを開放してくれる.
