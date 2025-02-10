@@ -74,7 +74,7 @@ controller:
       # All values are case-insensitive.
       # Specifying '*' as the first element will include all roles in the aggregation.
       #
-      # The ClusterRole name takes the form of <chart-fullname>-aggregate-role-viewer.
+      # The ClusterRole name takes the form of `<chart-fullname>`-aggregate-role-viewer.
       #
       # Example usages:
       # all roles:
@@ -90,7 +90,7 @@ controller:
       # All values are case-insensitive.
       # Specifying '*' as the first element will include all roles in the aggregation.
       #
-      # The ClusterRole name takes the form of <chart-fullname>-aggregate-role-editor.
+      # The ClusterRole name takes the form of `<chart-fullname>`-aggregate-role-editor.
       #
       # Example usages:
       # all roles:
@@ -120,8 +120,8 @@ controller:
     # Image sets the repo and tag of the kube-rbac-proxy image to use for the controller.
     image:
       pullPolicy: IfNotPresent
-      repository: gcr.io/kubebuilder/kube-rbac-proxy
-      tag: v0.15.0
+      repository: quay.io/brancz/kube-rbac-proxy
+      tag: v0.18.1
 
     # Configures the default resources for the kube rbac proxy container.
     # For more information on configuring resources, see the K8s documentation:
@@ -161,7 +161,7 @@ controller:
     image:
       pullPolicy: IfNotPresent
       repository: hashicorp/vault-secrets-operator
-      tag: 0.8.1
+      tag: 0.9.1
 
     # logging
     logging:
@@ -266,6 +266,18 @@ controller:
       # default: 10000
       # @type: integer
       cacheSize:
+
+      # Defines the number of locks to use for the Vault client cache controller.
+      # May also be set via the `VSO_CLIENT_CACHE_NUM_LOCKS` environment variable.
+      #
+      # Setting this value less than 1 will cause the manager to set the number of locks equal
+      # to the number of logical CPUs of the run host.
+      #
+      # See the VSO help output for more information.
+      #
+      # default: 100
+      # @type: integer
+      numLocks:
 
       # StorageEncryption provides the necessary configuration to encrypt the client storage
       # cache within Kubernetes objects using (required) Vault Transit Engine.
@@ -560,7 +572,7 @@ defaultVaultConnection:
   # Address of the Vault Server
   # @type: string
   # Example: http://vault.default.svc.cluster.local:8200
-  address: "http://valut.vault.svc.cluster.local:8200"
+  address: "http://vault.vault.svc.cluster.local:8200"
 
   # CACertSecret is the name of a Kubernetes secret containing the trusted PEM encoded CA certificate chain as `ca.crt`.
   # Note: This secret must exist prior to deploying the CR.
