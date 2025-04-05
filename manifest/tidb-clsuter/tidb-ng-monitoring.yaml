@@ -75,7 +75,7 @@ spec:
     baseImage: pingcap/ng-monitoring
 
     ## The storageClassName of the persistent volume for data storage.
-    storageClassName: topolvm-provisioner
+    storageClassName: synology-csi-iscsi-retain
 
     ## ng-monitoring configuration
     # config: |
