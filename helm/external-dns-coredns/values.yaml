@@ -15,7 +15,7 @@ image:
   # pullSecrets:
   #   - name: myRegistryKeySecretName
 
-replicaCount: 1
+replicaCount: 3
 
 resources:
   limits:
@@ -106,17 +106,8 @@ securityContext:
 # https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/#coredns-configmap-options
 servers:
 - zones:
-  - zone: k8sapiserver.cluster.orenet.net
-  port: 53
-  plugins:
-  - name: forward
-    parameters: . 192.168.1.161
-  - name: errors
-  - name: cache
-    parameter: 30
-
-- zones:
   - zone: cluster.orenet.net
+    use_tcp: true
   port: 53
   # -- expose the service on a different port
   # servicePort: 5353
@@ -128,7 +119,7 @@ servers:
   # Serves a /health endpoint on :8080, required for livenessProbe
   - name: health
     configBlock: |-
-      lameduck 5s
+      lameduck 10s
   # Serves a /ready endpoint on :8181, required for readinessProbe
   - name: ready
   # Required to query kubernetes API for data
@@ -141,6 +132,8 @@ servers:
   # Serves a /metrics endpoint on :9153, required for serviceMonitor
   - name: prometheus
     parameters: 0.0.0.0:9153
+  - name: forward
+    parameters: k8sapiserver.cluster.orenet.net 192.168.1.161
   - name: cache
     parameters: 30
   - name: loop
@@ -157,7 +150,7 @@ servers:
   port: 53
   plugins:
   - name: forward
-    parameters: . 192.168.1.161
+    parameters: . 192.168.1.1
   - name: errors
   - name: cache
     parameter: 30
@@ -197,9 +190,9 @@ livenessProbe:
 readinessProbe:
   enabled: true
   initialDelaySeconds: 30
-  periodSeconds: 10
+  periodSeconds: 5
   timeoutSeconds: 5
-  failureThreshold: 5
+  failureThreshold: 1
   successThreshold: 1
 
 # expects input structure as per specification https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#affinity-v1-core
@@ -365,7 +358,7 @@ autoscaler:
 
   image:
     repository: registry.k8s.io/cpa/cluster-proportional-autoscaler
-    tag: "1.8.5"
+    tag: "v1.9.0"
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
