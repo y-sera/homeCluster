@@ -6,7 +6,7 @@ metadata:
 data:
   Corefile: |
     cluster.orenet.net:53 {
-      forward . 192.168.1.64
+      forward . 192.168.2.64
     }
     .:53 {
         errors
