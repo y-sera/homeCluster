@@ -1,5 +1,5 @@
 ---
-apiVersion: cilium.io/v2alpha1
+apiVersion: cilium.io/v2
 kind: CiliumBGPClusterConfig
 metadata:
   name: cilium-bgp
@@ -10,6 +10,7 @@ spec:
   bgpInstances:
   - name: "bgp-nodes"
     localASN: 64513
+    localPort: 179
     peers:
     - name: "peer-to-router"
       peerASN: 64512
