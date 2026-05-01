@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://charts.jetstack.io
+    path: chart
+    helm:
+      valueFiles:
+      - $configs/helm/cert-manager/values.yaml
+      releaseName: cert-manager
+    chart: cert-manager
+    targetRevision: 1.20.2
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kube-system
