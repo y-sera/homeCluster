@@ -2558,10 +2558,10 @@ server:
 
     # -- Additional TLS configuration
     # @default -- `[]` (See [values.yaml])
-    extraTls:
-      - hosts:
-        - argocd.cluster.orenet.net
-        secretName: argocd-cert
+    extraTls: []
+      # - hosts:
+      #   - argocd.example.com
+      #   secretName: your-certificate-name
 
     # AWS specific options for Application Load Balancer
     # Applies only when `serv.ingress.controller` is set to `aws`
@@ -3600,7 +3600,7 @@ applicationSet:
 
     # -- Argo CD ApplicationSet hostname
     # @default -- `""` (defaults to global.domain)
-    hostname: "argocd.cluster.orenet.net"
+    hostname: "argocd-appset-controller.cluster.orenet.net"
 
     # -- List of ingress paths
     path: /api/webhook
@@ -3610,7 +3610,7 @@ applicationSet:
 
     # -- Enable TLS configuration for the hostname defined at `applicationSet.webhook.ingress.hostname`
     ## TLS certificate will be retrieved from a TLS secret with name:`argocd-applicationset-controller-tls`
-    tls: false
+    tls: true
 
     # -- The list of additional hostnames to be covered by ingress record
     # @default -- `[]` (See [values.yaml])
@@ -3645,10 +3645,10 @@ applicationSet:
 
     # -- Additional ingress TLS configuration
     # @default -- `[]` (See [values.yaml])
-    extraTls:
-      - secretName: argocd-cert
-        hosts:
-          - argocd.cluster.orenet.net
+    extraTls: []
+      # - secretName: argocd-applicationset-tls
+      #   hosts:
+      #     - argocd-applicationset.example.com
 
   ## Gateway API HTTPRoute for the Git Generator webhook
   ## Ref: https://argocd-applicationset.readthedocs.io/en/master/Generators-Git/#webhook-configuration)
