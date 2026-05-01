@@ -3610,7 +3610,7 @@ applicationSet:
 
     # -- Enable TLS configuration for the hostname defined at `applicationSet.webhook.ingress.hostname`
     ## TLS certificate will be retrieved from a TLS secret with name:`argocd-applicationset-controller-tls`
-    tls: true
+    tls: false
 
     # -- The list of additional hostnames to be covered by ingress record
     # @default -- `[]` (See [values.yaml])
