@@ -3592,8 +3592,7 @@ applicationSet:
     # -- Additional ingress labels
     labels: {}
     # -- Additional ingress annotations
-    annotations:
-      ingress.cilium.io/tls-passthrough: "enabled"
+    annotations: {}
 
     # -- Defines which ingress ApplicationSet controller will implement the resource
     ingressClassName: "cilium"
