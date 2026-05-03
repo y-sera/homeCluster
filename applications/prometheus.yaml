@@ -16,7 +16,10 @@ spec:
       - $configs/helm/prometheus/values.yaml
       releaseName: prometheus
     chart: kube-prometheus-stack
-    targetRevision: 61.6.0
+    targetRevision: 84.5.0
   destination:
     server: "https://kubernetes.default.svc"
     namespace: prometheus
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true
