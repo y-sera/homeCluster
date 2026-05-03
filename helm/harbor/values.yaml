@@ -712,7 +712,7 @@ jobservice:
   # Secret is used when job service communicates with other components.
   # If a secret key is not specified, Helm will generate one.
   # Must be a string of 16 chars.
-  secret: ""
+  secret: "8PXHkwBXuH1r5f55"
   # Use an existing secret resource
   existingSecret: ""
   # Key within the existing secret for the job service secret
