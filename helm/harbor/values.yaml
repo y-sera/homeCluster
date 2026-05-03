@@ -770,7 +770,7 @@ registry:
   # See: https://github.com/distribution/distribution/blob/release/2.8/docs/configuration.md#http
   # If a secret key is not specified, Helm will generate one.
   # Must be a string of 16 chars.
-  secret: ""
+  secret: "KiOv9fRQJ7x0fOWE"
   # Use an existing secret resource
   existingSecret: ""
   # Key within the existing secret for the registry service secret
