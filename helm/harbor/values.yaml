@@ -623,7 +623,7 @@ core:
   # Secret is used when core server communicates with other components.
   # If a secret key is not specified, Helm will generate one. Alternatively set existingSecret to use an existing secret
   # Must be a string of 16 chars.
-  secret: ""
+  secret: "f1GfqRHfBWO0NmLI"
   # Fill in the name of a kubernetes secret if you want to use your own
   # If using existingSecret, the key must be secret
   existingSecret: ""
