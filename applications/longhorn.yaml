@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://charts.longhorn.io
+    path: chart
+    helm:
+      valueFiles:
+      - $configs/helm/longhorn/values.yaml
+      releaseName: longhorn
+    chart: longhorn
+    targetRevision: 1.11.1
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: longhorn
