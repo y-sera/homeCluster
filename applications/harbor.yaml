@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://helm.goharbor.io
+    path: chart
+    helm:
+      valueFiles:
+      - $configs/helm/harbor/values.yaml
+      releaseName: harbor
+    chart: harbor
+    targetRevision: v1.18.1
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: harbor
