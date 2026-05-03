@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tidb-operator
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://charts.pingcap.org/
+    path: chart
+    helm:
+      valueFiles:
+      - $configs/helm/tidb-operator/values.yaml
+      releaseName: tidb-operator
+    chart: tidb-operator
+    targetRevision: 1.6.5
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: tidb-operator
