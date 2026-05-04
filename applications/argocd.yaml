@@ -16,7 +16,7 @@ spec:
       - $configs/helm/argocd/values.yaml
       releaseName: argocd
     chart: argo-cd
-    targetRevision: 9.5.9
+    targetRevision: 9.5.11
   destination:
     server: "https://kubernetes.default.svc"
     namespace: argocd
