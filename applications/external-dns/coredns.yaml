@@ -14,7 +14,7 @@ spec:
     helm:
       valueFiles:
       - $configs/helm/external-dns-coredns/values.yaml
-      releaseName: external-dns-coredns
+      releaseName: coredns
     chart: coredns
     targetRevision: 1.45.2
   destination:
