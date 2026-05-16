@@ -229,6 +229,11 @@ sourceNamespace:  # @schema type:[string, null]; default: null
 sources:
   - service
   - ingress
+  - gateway-httproute
+  - gateway-grpcroute
+  - gateway-tlsroute
+  - gateway-tcproute
+  - gateway-udproute
 
 # -- How DNS records are synchronized between sources and providers; available values are `create-only`, `sync`, & `upsert-only`.
 policy: sync  # @schema enum:[create-only, sync, upsert-only]; type:string; default: "upsert-only"
