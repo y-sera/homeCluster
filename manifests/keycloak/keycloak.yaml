@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: keycloak
+  namespace: keycloak
   labels:
     app: keycloak
 spec:
@@ -20,6 +21,7 @@ metadata:
   labels:
     app: keycloak
   name: keycloak-discovery
+  namespace: keycloak
 spec:
   selector:
     app: keycloak
@@ -32,6 +34,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: keycloak
+  namespace: keycloak
   labels:
     app: keycloak
 spec:
@@ -131,6 +134,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  namespace: keycloak
   labels:
     app: postgres
 spec:
@@ -172,6 +176,7 @@ metadata:
   labels:
     app: postgres
   name: postgres
+  namespace: keycloak
 spec:
   selector:
     app: postgres
