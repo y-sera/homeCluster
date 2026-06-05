@@ -136,6 +136,9 @@ servers:
     parameters: 0.0.0.0:9153
   - name: forward
     parameters: k8sapiserver.cluster.orenet.net 192.168.1.161
+  - name: rewrite
+    configBlock: -
+      name regex ^([^*][^.]*)\.(.*\.example\.com)$ *.{2}
   - name: cache
     parameters: 30
   - name: loop
