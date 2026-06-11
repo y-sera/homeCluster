@@ -16,7 +16,7 @@ spec:
       - $configs/helm/longhorn/values.yaml
       releaseName: longhorn
     chart: longhorn
-    targetRevision: 1.11.1
+    targetRevision: 1.12.0
   destination:
     server: "https://kubernetes.default.svc"
     namespace: longhorn
