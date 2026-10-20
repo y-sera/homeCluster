@@ -13,7 +13,7 @@ spec:
     path: chart
     helm:
       valueFiles:
-      - $configs/helm/longhorn/values.yaml
+      - $configs/deploy/longhorn/values.yaml
       releaseName: longhorn
     chart: longhorn
     targetRevision: 1.12.0
