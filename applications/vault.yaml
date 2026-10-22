@@ -16,7 +16,7 @@ spec:
       - $configs/helm/vault/values.yaml
       releaseName: vault
     chart: vault
-    targetRevision: 0.32.0
+    targetRevision: 0.34.1
   destination:
     server: "https://kubernetes.default.svc"
     namespace: vault
