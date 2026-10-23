@@ -13,7 +13,7 @@ spec:
     path: chart
     helm:
       valueFiles:
-      - $configs/deploy/vault/values.yaml
+      - $configs/deploy/vault/values/values.yaml
       releaseName: vault
     chart: vault
     targetRevision: 0.34.1
