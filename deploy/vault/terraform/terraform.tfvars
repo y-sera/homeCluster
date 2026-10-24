@@ -2,7 +2,7 @@
 # terraform.tfvars - この環境 (homeCluster) 用の実値
 # 値の出所:
 #   - Vault外部アドレス: kubectl -n vault get ingress (vault.cluster.orenet.net)
-#   - ESOのSA/namespace: helm/external-secrets-operator/values.yaml
+#   - ESOのSA/namespace: deploy/external-secrets-operator/values/values.yaml
 # ------------------------------------------------------------------------------
 
 # Vault provider -----------------------------------------------------------------

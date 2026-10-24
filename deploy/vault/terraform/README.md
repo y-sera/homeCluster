@@ -88,6 +88,7 @@ Vault UI (`https://vault.cluster.orenet.net`) からも登録可能。
 ## ESO側の設定例
 
 `ClusterSecretStore` と `ExternalSecret` の例。ArgoCD等のGitOpsフローに乗せて適用する。
+ClusterSecretStoreの実ファイル: `deploy/external-secrets-operator/manifests/clustersecretstore.yaml`
 
 ```yaml
 apiVersion: external-secrets.io/v1
