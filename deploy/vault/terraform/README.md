@@ -10,7 +10,7 @@ Vault側のリソース (KV v2マウント・Kubernetes認証) を作成するTe
 | `vault_mount` | `kv` (KV v2) | シークレットの保存先 |
 | `vault_auth_backend` | `kubernetes` | Kubernetes認証の有効化 |
 | `vault_kubernetes_auth_backend_config` | - | APIサーバー (`https://kubernetes.default.svc`) の設定。TokenReviewにはVaultポッド自身のSAトークン/ローカルCAが使用される (`disable_local_ca_jwt=false`) |
-| `vault_policy` | `external-secrets-operator` | `kv/data/*`, `kv/metadata/*` の `read` |
+| `vault_policy` | `external-secrets-operator` | `eso/data/*`, `eso/metadata/*` の `read` |
 | `vault_kubernetes_auth_backend_role` | `external-secrets-operator` | ESOのSA (`external-secrets-operator@external-secrets-operator`) へのバインド |
 
 認証フロー:
@@ -71,13 +71,13 @@ Terraform stateはKubernetes Secretに保存する (`versions.tf` の `backend "
 
 ## シークレットの登録方法
 
-apply後、KV v2マウント (`kv`) 配下にシークレットを登録する:
+apply後、KV v2マウント (`eso`) 配下にシークレットを登録する:
 
 ```bash
-vault kv put kv/myapp/config username="admin" password="supersecret"
+vault kv put eso/myapp/config username="admin" password="supersecret"
 
 # 確認
-vault kv get kv/myapp/config
+vault kv get eso/myapp/config
 ```
 
 Vault UI (`https://vault.cluster.orenet.net`) からも登録可能。
@@ -99,7 +99,7 @@ spec:
   provider:
     vault:
       server: https://vault.cluster.orenet.net
-      path: kv
+      path: eso
       version: v2
       auth:
         kubernetes:
@@ -148,7 +148,7 @@ terraform apply -var="enable_example_secret=true" \
 | 変数 | デフォルト | 説明 |
 |---|---|---|
 | `vault_address` | `null` (VAULT_ADDR環境変数) | Vault APIアドレス |
-| `kv_mount_path` | `kv` | KV v2マウントパス |
+| `kv_mount_path` | `eso` | KV v2マウントパス |
 | `kubernetes_auth_backend_path` | `kubernetes` | kubernetes認証のマウントパス |
 | `kubernetes_host` | `https://kubernetes.default.svc` | Vault podから見たAPIサーバー |
 | `eso_namespace` | `external-secrets-operator` | ESOが動作するnamespace |
@@ -159,7 +159,7 @@ terraform apply -var="enable_example_secret=true" \
 
 ## 注意事項
 
-- **stateは機密情報を含み得る**: 例えばサンプルシークレット (`enable_example_secret`) の data は state に平文で記録される。stateは `vault` namespaceのSecret (`tfstate-default-vault-external-secrets`) に保存されるが、Secretはbase64エンコードのみで暗号化されないため、etcdのシークレット暗号化 (k3sなら `--encrypt-secrets`) の有効化や、当該namespaceへのRBAC制限を推奨。ローカルに残る `*.tfstate*` や `*.tfvars` はコミットしない (`.gitignore` 済み)
+- **stateは機密情報を含み得る**: 例えばサンプルシークレット (`enable_example_secret`) の data は state に平文で記録される。stateは `vault` namespaceのSecret (`tfstate-default-vault-external-secrets`) に保存されるが、Secretはbase64エンコードのみで暗号化されないため、etcdのシークレット暗号化 (k3sなら `--encrypt-secrets`) の有効化や、当該namespaceへのRBAC制限を推奨。ローカルに残る `*.tfstate*`はコミットしない (`.gitignore` 済み)
 - **TokenReviewはVault自身のSAトークンで行う**: `vault_kubernetes_auth_backend_config` は `kubernetes_host` と `disable_iss_validation` のみを設定しており、Vaultポッドのprojected SAトークンとローカルCAがTokenReviewに使用される (kubeletによるトークンローテーションにも自動追従、Vault 1.9+)。この動作には `system:auth-delegator` 権限が必要で、Vault Helm chartの `server.authDelegator.enabled: true` (`deploy/vault/values/values.yaml`) が `vault-server-binding` ClusterRoleBindingとして付与している。chartで `authDelegator` を無効化する場合は、`system:auth-delegator` をVaultのServiceAccountにバインドするClusterRoleBindingを自前で用意すること
 - **policyの権限は `read` のみ**: シークレットの書き込みは `vault kv put` やUIで行う。ESOの `find` (メタデータ一覧) 等で `list` が必要になった場合は `auth.tf` の `vault_policy_document` に `capabilities = ["read", "list"]` を追加する
 - `disable_iss_validation = true` としているため、Kubernetesのissuer設定に依存せず動作する

@@ -13,7 +13,7 @@ vault_address = "https://vault.cluster.orenet.net"
 #   export VAULT_TOKEN="hvs.xxxxxxxxxxxxxxxxxxxx"
 
 # Vault設定 -------------------------------------------------------------------------
-kv_mount_path                = "kv"
+kv_mount_path                = "eso"
 kubernetes_auth_backend_path = "kubernetes"
 
 # Vaultポッドから見たAPIサーバーエンドポイント (in-cluster DNS)

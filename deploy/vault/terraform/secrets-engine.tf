@@ -1,7 +1,7 @@
 # KV v2 secrets engine.
-# シークレットは `vault kv put kv/<name> ...` で登録し、
-# ESOの SecretStore では path = "kv", version = "v2" として参照する。
-resource "vault_mount" "kv" {
+# シークレットは `vault kv put eso/<name> ...` で登録し、
+# ESOの SecretStore では path = "eso", version = "v2" として参照する。
+resource "vault_mount" "eso" {
   path        = var.kv_mount_path
   type        = "kv"
   description = "KV v2 secrets engine for External Secrets Operator"
@@ -17,7 +17,7 @@ resource "vault_mount" "kv" {
 resource "vault_kv_secret_v2" "example" {
   count = var.enable_example_secret ? 1 : 0
 
-  mount     = vault_mount.kv.path
+  mount     = vault_mount.eso.path
   name      = var.example_secret_name
   data_json = jsonencode(var.example_secret_data)
 }

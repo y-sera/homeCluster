@@ -13,9 +13,9 @@ spec:
   data:
   - secretKey: username
     remoteRef:
-      key: kv/backend-qts-secret
+      key: eso/backend-qts-secret
       property: username
   - secretKey: password
     remoteRef:
-      key: kv/backend-qts-secret
+      key: eso/backend-qts-secret
       property: password

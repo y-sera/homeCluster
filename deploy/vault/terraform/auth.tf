@@ -38,12 +38,12 @@ resource "vault_kubernetes_auth_backend_config" "kubernetes" {
 # ESOから読み取れるのはこのKVマウント配下のみ。
 data "vault_policy_document" "eso_read" {
   rule {
-    path         = "${vault_mount.kv.path}/data/*"
+    path         = "${vault_mount.eso.path}/data/*"
     capabilities = ["read"]
   }
 
   rule {
-    path         = "${vault_mount.kv.path}/metadata/*"
+    path         = "${vault_mount.eso.path}/metadata/*"
     capabilities = ["read"]
   }
 }

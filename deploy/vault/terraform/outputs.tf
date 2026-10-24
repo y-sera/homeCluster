@@ -1,6 +1,6 @@
 output "kv_mount_path" {
   description = "Path of the KV v2 secrets engine."
-  value       = vault_mount.kv.path
+  value       = vault_mount.eso.path
 }
 
 output "kubernetes_auth_backend_path" {
@@ -15,5 +15,5 @@ output "kubernetes_auth_role_name" {
 
 output "example_secret_path" {
   description = "KV v2 path of the example secret (null when disabled)."
-  value       = var.enable_example_secret ? "${vault_mount.kv.path}/${var.example_secret_name}" : null
+  value       = var.enable_example_secret ? "${vault_mount.eso.path}/${var.example_secret_name}" : null
 }
