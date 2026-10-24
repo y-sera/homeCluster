@@ -1,0 +1,21 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: qts-csi-smb
+  namespace: trident
+spec:
+  refreshInterval: "15s"
+  secretStoreRef:
+    name: vault
+    kind: ClusterSecretStore
+  target:
+    name: qts-csi-smb
+  data:
+  - secretKey: username
+    remoteRef:
+      key: kv/backend-qts-secret
+      property: username
+  - secretKey: password
+    remoteRef:
+      key: kv/backend-qts-secret
+      property: password
