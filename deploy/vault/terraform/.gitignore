@@ -1,0 +1,7 @@
+# Terraform state には reviewer トークンなどの機密情報が含まれるため管理対象外とする
+*.tfstate
+*.tfstate.*
+!terraform.tfvars.example
+crash.log
+crash.*.log
+.terraform/
