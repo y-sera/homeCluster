@@ -3,6 +3,7 @@ kind: StorageClass
 metadata:
   name: qnap-smb # Required. Name your storageclass.
 provisioner: csi.trident.qnap.io
+reclaimPolicy: Retain
 parameters:
   selector: "name=pool1" # Required. Corresponds to the labels in the virtual pool.
   trident.qnap.io/fileProtocol: "smb"        
