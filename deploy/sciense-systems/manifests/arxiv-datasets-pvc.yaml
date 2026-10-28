@@ -2,7 +2,7 @@ kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
   name: arxiv-datasets
-  namespace: sciense-systems
+  namespace: science-systems
   annotations: # Required. Define features for your volume.
     trident.qnap.io/Threshold: "90"
     trident.qnap.io/ThinAllocate: "true"
