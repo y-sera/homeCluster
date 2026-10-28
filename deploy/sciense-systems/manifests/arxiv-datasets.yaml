@@ -1,0 +1,19 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: arxiv-datasets
+  namespace: sciense-systems
+  annotations: # Required. Define features for your volume.
+    trident.qnap.io/Threshold: "90"
+    trident.qnap.io/ThinAllocate: "true"
+
+    # I/O synchronization mode. iSCSI only. Accepted values: default, sync, async.
+    # "async" is not supported on QTS 6.0 or later and will fail volume creation.
+    # trident.qnap.io/IoSyncMode: "default"
+spec:
+  accessModes:
+    - ReadWriteMany # Required. iSCSI: ReadWriteOnce, Samba: ReadWriteMany
+  resources:
+    requests:
+      storage: 17Ti # Required. Specify your resource size.
+  storageClassName: qnap-smb # Required. Corresponds to the StorageClass name.
