@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hf-download
+  namespace: science-systems
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: hf-cli
+          image: harbor.cluster.orenet.net/llm-system/hf-cli:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            - name: HF_HOME
+              value: /root/data/.cache/huggingface
+          # ENTRYPOINT が hf なので args にサブコマンド以降を指定
+          args:
+            - download
+            - secemp9/arxiv-complete
+            - --repo-type
+            - dataset
+            - --local-dir
+            - /root/data/
+          volumeMounts:
+            - name: arxiv-datasets
+              mountPath: /root/data
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: arxiv-datasets
+          persistentVolumeClaim:
+            claimName: arxiv-datasets
