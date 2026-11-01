@@ -9,6 +9,15 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      # SMB 上で hf の並列スレッドが同時に mkdir すると EACCES になるため、事前に作成しておく
+      initContainers:
+        - name: prepare-dirs
+          image: harbor.cluster.orenet.net/llm-system/hf-cli:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "mkdir -p /root/data/.cache/huggingface/download"]
+          volumeMounts:
+            - name: arxiv-datasets
+              mountPath: /root/data
       containers:
         - name: hf-cli
           image: harbor.cluster.orenet.net/llm-system/hf-cli:latest
@@ -19,8 +28,9 @@ spec:
                 secretKeyRef:
                   name: hf-token
                   key: HF_TOKEN
+            # キャッシュは SMB ではなく Pod ローカルに置く (local-dir のメタデータ置き場と重ならないように)
             - name: HF_HOME
-              value: /root/data/.cache/huggingface
+              value: /hf-home
           # ENTRYPOINT が hf なので args にサブコマンド以降を指定
           args:
             - download
@@ -32,6 +42,8 @@ spec:
           volumeMounts:
             - name: arxiv-datasets
               mountPath: /root/data
+            - name: hf-home
+              mountPath: /hf-home
           resources:
             requests:
               cpu: 500m
@@ -42,3 +54,5 @@ spec:
         - name: arxiv-datasets
           persistentVolumeClaim:
             claimName: arxiv-datasets
+        - name: hf-home
+          emptyDir: {}
