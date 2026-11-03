@@ -1,0 +1,53 @@
+---
+crds:
+  enabled: true
+operator:
+  envs:
+    QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYCLOAKCONTROLLER_NAMESPACES: JOSDK_ALL_NAMESPACES
+    QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYCLOAKOIDCCLIENTCONTROLLER_NAMESPACES: JOSDK_ALL_NAMESPACES
+    QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYCLOAKREALMIMPORTCONTROLLER_NAMESPACES: JOSDK_ALL_NAMESPACES
+    QUARKUS_OPERATOR_SDK_CONTROLLERS_KEYCLOAKSAMLCLIENTCONTROLLER_NAMESPACES: JOSDK_ALL_NAMESPACES
+    RELATED_IMAGE_KEYCLOAK: quay.io/keycloak/keycloak:26.8.1
+    kc:
+      operator:
+        keycloak:
+          image: quay.io/keycloak/keycloak:26.8.1
+  image: quay.io/keycloak/keycloak-operator:26.8.1
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /q/health/live
+      scheme: HTTP
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 10
+  ports:
+    http: 8080
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /q/health/ready
+      scheme: HTTP
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 10
+  replicas: 1
+  resources:
+    limits:
+      cpu: 700m
+      memory: 450Mi
+    requests:
+      cpu: 300m
+      memory: 450Mi
+  startupProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /q/health/started
+      scheme: HTTP
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 10
+
