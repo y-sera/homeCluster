@@ -1,0 +1,12 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: KeycloakRealmImport
+metadata:
+  name: home
+  namespace: keycloak
+spec:
+  keycloakCRName: keycloak
+  realm:
+    id: home
+    realm: home
+    displayName: home
+    enabled: true
