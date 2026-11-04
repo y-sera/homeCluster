@@ -1,0 +1,29 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  instances: 1
+  db:
+    vendor: postgres
+    host: postgres-db
+    usernameSecret:
+      name: db-password
+      key: username
+    passwordSecret:
+      name: db-password
+      key: password
+  http:
+    httpEnabled: true
+  ingress:
+    enabled: true
+    annotatiions: null
+    className: cilium
+    tlsSecret: keycloak-cert
+  hostname:
+    hostname: keycloak.cluster.orenet.net
+  proxy:
+    headers: xforwarded 
+  networkPolicy:
+    enabled: false
