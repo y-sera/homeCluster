@@ -18,7 +18,6 @@ spec:
     httpEnabled: true
   ingress:
     enabled: true
-    annotatiions: null
     className: cilium
     tlsSecret: keycloak-cert
   hostname:
