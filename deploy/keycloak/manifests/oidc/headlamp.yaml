@@ -2,12 +2,18 @@ apiVersion: k8s.keycloak.org/v2alpha1
 kind: KeycloakOIDCClient
 metadata:
   name: headlamp
-  namespace: keycloak 
+  namespace: keycloak
 spec:
   keycloakCRName: keycloak
   realm: home
-  client: 
+  client:
+    enabled: true
     loginFlows:
       - STANDARD
     redirectUris:
       - "https://headlamp.cluster.orenet.net/oidc-callback"
+    auth:
+      method: client-secret
+      secretRef:
+        name: headlamp-oidc
+        key: client-secret
