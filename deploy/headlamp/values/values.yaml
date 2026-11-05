@@ -41,7 +41,7 @@ config:
 
   # -- UNSAFE: authenticate every Headlamp user as the pod's service account when running in-cluster.
   # This disables per-user authentication and is only safe behind an auth proxy (e.g. OIDC proxy).
-  unsafeUseServiceAccountToken: false
+  unsafeUseServiceAccountToken: true
   # -- path to the service account token file.
   # Only used when unsafeUseServiceAccountToken is true.
   # Defaults to /var/run/secrets/kubernetes.io/serviceaccount/token when empty.
