@@ -4,6 +4,9 @@ metadata:
   name: keycloak
   namespace: keycloak
 spec:
+  features:
+    enabled:
+      - client-admin-api:v2
   instances: 1
   db:
     vendor: postgres
