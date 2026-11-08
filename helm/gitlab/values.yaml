@@ -51,7 +51,7 @@ global:
   edition: ee
 
   ## https://docs.gitlab.com/charts/charts/globals#gitlab-version
-  gitlabVersion: "18.7.0"
+  gitlabVersion: "18.8.11"
 
   ## https://docs.gitlab.com/charts/charts/globals#application-resource
   application:
@@ -599,11 +599,6 @@ global:
         # caFile:
         # privateKeyFile:
         # certificateFile:
-
-    ## https://docs.gitlab.com/charts/charts/globals#suggested-reviewers-settings
-    suggested_reviewers: {}
-      # secret:
-      # key:
 
     ## https://docs.gitlab.com/charts/charts/globals#omniauth
     omniauth:
