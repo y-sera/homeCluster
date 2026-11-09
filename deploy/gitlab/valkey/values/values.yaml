@@ -1,0 +1,30 @@
+# GitLab 用 Valkey (bundled Redis の置き換え)
+# chart valkey 0.12.1 (https://valkey.io/valkey-helm/)。デフォルトから変更する値のみ記載する。
+# 接続先: gitlab-valkey.gitlab.svc:6379 / パスワード: Secret gitlab-valkey の key "default"
+
+image:
+  # chart デフォルトは 9.x。GitLab の要件 (Valkey >= 7.2, 推奨 7.2) を踏まえ 8.1 系に固定する
+  tag: "8.1"
+
+deploymentStrategy: Recreate
+
+# セッションや Sidekiq キューを保持するため AOF を有効化
+valkeyConfig: |
+  appendonly yes
+
+dataStorage:
+  enabled: true
+  className: qnap-iscsi
+  requestedSize: 2Gi
+  keepPvc: true
+
+auth:
+  enabled: true
+  usersExistingSecret: gitlab-valkey
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+      passwordKey: default
+
+metrics:
+  enabled: false

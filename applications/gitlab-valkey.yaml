@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitlab-valkey
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://valkey.io/valkey-helm/
+    helm:
+      valueFiles:
+      - $configs/deploy/gitlab/valkey/values/values.yaml
+      releaseName: gitlab-valkey
+    chart: valkey
+    targetRevision: 0.12.1
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: gitlab
