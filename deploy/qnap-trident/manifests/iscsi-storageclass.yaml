@@ -1,0 +1,13 @@
+# - reference sample: QNAP-CSI-PlugIn Samples/StorageClass/sc_iscsi_sample.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: qnap-iscsi
+provisioner: csi.trident.qnap.io
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+parameters:
+  selector: "name=pool1" # Required.
+  fsType: "ext4" # Optional. ext4 (default) / xfs / ext3
+  replacementTimeout: "120" # Optional. iSCSI timeout second. (default 120)
