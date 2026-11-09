@@ -8,7 +8,11 @@ spec:
   version: 1
   storageDriverName: qnap-nas #Required. Support 'qnap-nas'(latest) or 'qnap-iscsi'
   backendName: qts # Required. Name your backend in QNAP CSI.
-  #networkInterfaces: ["Adapter1"] # Optional. Your adapter name or leave it empty.
+  # iSCSI ポータルとして使う NIC を限定する。
+  # 未指定だと IP 未割当のアダプタも空ポータルとして返され、iSCSI の stage が失敗する
+  # (p1="" / "multipath device not found when it is expected")。
+  # 名前は QTS「ネットワークと仮想スイッチ → インターフェース」で 192.168.1.162 を持つアダプタ名に合わせる。
+  networkInterfaces: ["Adapter1"] # Optional. Your adapter name or leave it empty.
   #useCHAP: true # Optional. Enables CHAP authentication for iSCSI connections.
   credentials:
     name: backend-qts-secret # Required. Enter the secret name set in metadata.name.
