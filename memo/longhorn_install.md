@@ -36,6 +36,11 @@ blacklist {
 sudo systemctl restart multipathd.service
 ```
 
+> **注意**: 上記の devnode によるブラックリストは, QNAP CSI(qnap-iscsi)導入時に置き換え済み.
+> この設定のままだと QNAP の iSCSI LUN もマルチパス対象外となり, qnap-iscsi のボリュームがマウントできなくなる.
+> 現在の `/etc/multipath.conf` の設定内容(ベンダー名で Longhorn / Synology を除外し QNAP のみを対象にする)と反映手順は
+> `memo/qnap-trident_install_memo.md` の「マルチパス設定」を参照すること.
+
 ## ArgoCD用の設定
 
 Helmインストールと異なり, ArgoCDによる初回インストールにおいては, 以下のパラメータをfalseとしておく.
