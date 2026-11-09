@@ -1,0 +1,10 @@
+crds:
+  create: true
+
+config:
+  clusterWide: true
+
+monitoring:
+  podMonitorEnabled: false
+  grafanaDashboard:
+    create: false
