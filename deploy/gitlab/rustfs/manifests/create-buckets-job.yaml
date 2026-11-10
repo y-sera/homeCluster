@@ -1,0 +1,76 @@
+# GitLab 用バケットを RustFS に作成する Job (冪等。既存バケットはスキップする)
+# RustFS の起動後に手動で apply する:
+#   kubectl apply -f deploy/gitlab/rustfs/manifests/create-buckets-job.yaml
+#   kubectl -n gitlab logs job/gitlab-rustfs-create-buckets
+# 再実行する場合は Job を削除してから apply する。
+# バケット名は bundled MinIO (helm/gitlab/values.yaml) で使用している名前に合わせる。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-rustfs-create-buckets
+  namespace: gitlab
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: create-buckets
+        image: amazon/aws-cli:2.17.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: AWS_DEFAULT_REGION
+          value: us-east-1
+        - name: AWS_ENDPOINT_URL
+          value: http://gitlab-rustfs-svc.gitlab.svc:9000
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        - name: BUCKETS
+          value: >-
+            git-lfs
+            gitlab-artifacts
+            gitlab-uploads
+            gitlab-packages
+            gitlab-mr-diffs
+            gitlab-terraform-state
+            gitlab-ci-secure-files
+            gitlab-dependency-proxy
+            gitlab-pages
+            gitlab-backups
+            tmp
+            registry
+            runner-cache
+        command:
+        - sh
+        - -ec
+        - |
+          for b in $BUCKETS; do
+            if aws s3api head-bucket --bucket "$b" >/dev/null 2>&1; then
+              echo "exists : $b"
+            else
+              aws s3api create-bucket --bucket "$b" >/dev/null
+              echo "created: $b"
+            fi
+          done
+          echo "--- bucket list"
+          aws s3 ls

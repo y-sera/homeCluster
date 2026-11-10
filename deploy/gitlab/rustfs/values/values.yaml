@@ -1,0 +1,32 @@
+# GitLab 用 RustFS (bundled MinIO の置き換え)
+# chart rustfs 1.0.4 (https://charts.rustfs.com)。デフォルトから変更する値のみ記載する。
+# 接続先 (S3 API): http://gitlab-rustfs-svc.gitlab.svc:9000
+# 認証情報: Secret gitlab-rustfs-credentials (RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY)
+
+# バックエンドは NAS 1 台のため、分散構成 (イレイジャーコーディング) ではなく単一ノード構成とする
+mode:
+  standalone:
+    enabled: true
+    # RWO の PVC を新旧 Pod で取り合わないよう Recreate
+    strategy:
+      type: Recreate
+      rollingUpdate: null
+  distributed:
+    enabled: false
+
+secret:
+  # ExternalSecret (manifests/rustfs-credentials-external-secret.yaml) が作成する Secret
+  existingSecret: gitlab-rustfs-credentials
+
+config:
+  rustfs:
+    # ログはファイル (専用 PVC) ではなく標準出力に出す
+    obs_log_directory: ""
+
+storageclass:
+  name: qnap-iscsi
+  dataStorageSize: 20Gi
+
+# GitLab は proxy_download で全てプロキシし、runner cache もクラスター内部から接続するため外部公開しない
+ingress:
+  enabled: false
