@@ -3,7 +3,7 @@
 #
 # 2026-11-12 に同梱 PostgreSQL (bitnami, 16.6) から initdb.import (microservice 方式) で取り込み済み.
 # 取り込み元 (bootstrap.initdb.import / externalClusters) の定義は旧 PostgreSQL の削除に合わせて削除した.
-#   手順と結果: memo/gitlab_externalization_runbook.md
+#   手順と結果: memo/gitlab_externalization_runbook.md (2026-11-12 削除。git の履歴を参照)
 # bootstrap は Cluster 作成時のみ使用される. 作り直す場合は空の DB が作成されるため, GitLab のバックアップからリストアする.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
