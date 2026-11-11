@@ -1,0 +1,18 @@
+# Container Registry のメタデータ DB (CNPG 宣言的 Database)
+# ロール registry は cluster.yaml の spec.managed.roles で作成する。
+# databaseReclaimPolicy: retain により、この manifest を削除しても DB は削除されない。
+# ロール作成前に適用すると "role registry does not exist" で失敗したまま再試行されないことがある。
+# その場合は annotation を付け外しして再処理させる:
+#   kubectl -n gitlab annotate database gitlab-postgres-registry reconcile-trigger="$(date +%s)" --overwrite
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: gitlab-postgres-registry
+  namespace: gitlab
+spec:
+  cluster:
+    name: gitlab-postgres
+  name: registry
+  owner: registry
+  ensure: present
+  databaseReclaimPolicy: retain

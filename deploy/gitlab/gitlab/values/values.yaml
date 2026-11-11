@@ -73,6 +73,16 @@ prometheus:
   install: false
 
 registry:
+  ## メタデータ DB (CNPG gitlab-postgres 上の registry DB。ロール / DB は deploy/gitlab/postgres/manifests で作成)
+  ## オンライン GC が有効になる。旧方式 (オブジェクトストレージ上のメタデータ) は 19.x でメンテナンスモード
+  database:
+    enabled: true
+    name: registry
+    user: registry
+    password:
+      secret: gitlab-registry-database
+      key: password
+    sslmode: require
   storage:
     secret: gitlab-registry-storage
     key: config
@@ -91,6 +101,15 @@ gitlab:
         config:
           secret: gitlab-backup-storage
           key: config
+      # Registry メタデータ DB のバックアップ / リストア用の接続ユーザー (registry ユーザーをそのまま使う)
+      registry:
+        database:
+          backupUser: registry
+          restoreUser: registry
+          password:
+            secret: gitlab-registry-database
+            backupPasswordKey: password
+            restorePasswordKey: password
 
 gitlab-runner:
   runners:

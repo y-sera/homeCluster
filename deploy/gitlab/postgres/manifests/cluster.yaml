@@ -31,6 +31,16 @@ spec:
       cpu: 250m
       memory: 512Mi
 
+  # アプリケーション用以外のロール (DB 本体は registry-database.yaml の Database リソースで作成)
+  managed:
+    roles:
+    # Container Registry のメタデータ DB 用
+    - name: registry
+      ensure: present
+      login: true
+      passwordSecret:
+        name: gitlab-registry-database
+
   bootstrap:
     initdb:
       database: gitlabhq_production
