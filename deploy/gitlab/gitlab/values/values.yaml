@@ -5,7 +5,7 @@
 #   helm upgrade gitlab gitlab/gitlab -n gitlab --version 9.11.16 -f deploy/gitlab/gitlab/values/values.yaml
 #
 # chart のデフォルトから変更する値のみ記載する。
-# 旧 values (helm/gitlab/values.yaml) は chart デフォルトの全量コピーだったため、外部化に合わせて差分のみに整理した。
+# 旧 values (helm/gitlab/values.yaml, 2026-11-12 削除) は chart デフォルトの全量コピーだったため、外部化に合わせて差分のみに整理した。
 #
 # 外部サービス (いずれも namespace gitlab)
 #   PostgreSQL : CNPG Cluster gitlab-postgres   (deploy/gitlab/postgres)

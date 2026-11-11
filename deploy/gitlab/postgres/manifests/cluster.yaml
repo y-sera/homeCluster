@@ -1,16 +1,10 @@
 # GitLab 用 PostgreSQL (CloudNativePG)
 # 接続先: gitlab-postgres-rw.gitlab.svc:5432 / DB: gitlabhq_production / ユーザー: gitlab
 #
-# 初回作成時に, 同梱 PostgreSQL (bitnami, 16.6) から gitlabhq_production を
-# pg_dump / pg_restore で取り込む (initdb.import, microservice 方式).
-# 取り込みは Cluster 作成時の 1 回のみ実行されるため, **GitLab を停止してから apply する** (Phase 4 の切替手順内).
-#   kubectl apply -f deploy/gitlab/postgres/manifests/cluster.yaml
-#   kubectl -n gitlab get cluster gitlab-postgres -w            # "Cluster in healthy state" になるまで待つ
-#   kubectl -n gitlab logs -l cnpg.io/cluster=gitlab-postgres,cnpg.io/jobRole=import  # 取り込みログ
-#
-# 取り込み元 (2026-11 時点の調査結果):
-#   DB は gitlabhq_production のみ (191MB, owner gitlab). 拡張は pg_trgm / btree_gist.
-#   registry メタデータ DB は未使用.
+# 2026-11-12 に同梱 PostgreSQL (bitnami, 16.6) から initdb.import (microservice 方式) で取り込み済み.
+# 取り込み元 (bootstrap.initdb.import / externalClusters) の定義は旧 PostgreSQL の削除に合わせて削除した.
+#   手順と結果: memo/gitlab_externalization_runbook.md
+# bootstrap は Cluster 作成時のみ使用される. 作り直す場合は空の DB が作成されるため, GitLab のバックアップからリストアする.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -43,21 +37,3 @@ spec:
       owner: gitlab
       secret:
         name: gitlab-postgres-app
-      import:
-        type: microservice
-        databases:
-        - gitlabhq_production
-        source:
-          externalCluster: gitlab-postgresql-bundled
-
-  externalClusters:
-  # 取り込み元: GitLab chart 同梱の PostgreSQL (切替後は不要. 旧 PostgreSQL 削除後もこの定義は残っていて問題ない)
-  - name: gitlab-postgresql-bundled
-    connectionParameters:
-      host: gitlab-postgresql.gitlab.svc
-      user: postgres
-      dbname: postgres
-      sslmode: disable
-    password:
-      name: gitlab-postgresql-password
-      key: postgresql-postgres-password

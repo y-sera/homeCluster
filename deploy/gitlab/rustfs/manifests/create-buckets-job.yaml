@@ -3,7 +3,7 @@
 #   kubectl apply -f deploy/gitlab/rustfs/manifests/create-buckets-job.yaml
 #   kubectl -n gitlab logs job/gitlab-rustfs-create-buckets
 # 再実行する場合は Job を削除してから apply する。
-# バケット名は bundled MinIO (helm/gitlab/values.yaml) で使用している名前に合わせる。
+# バケット名は GitLab chart のデフォルト (旧 bundled MinIO と同じ名前) に合わせる。
 apiVersion: batch/v1
 kind: Job
 metadata:

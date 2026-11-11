@@ -3,6 +3,9 @@
 chart 9.11.16(GitLab 18.11.14)のまま, 同梱 PostgreSQL / Redis / MinIO を外部サービスへ切り替え, Gitaly の PV を qnap-iscsi へ移す.
 切替後に 10.2.10(19.2) → 10.5.4(19.5)へアップグレードする(本手順の対象外).
 
+**実施記録: 2026-11-12 に本手順で切替完了**(helm rev 44 → 45, 停止から全 Pod Ready まで約 10 分).
+各手順の結果は該当箇所に記載. 旧 PV / 旧 Secret / `helm/gitlab/values.yaml` は削除済み.
+
 | 対象 | 切替前 | 切替後 | データ移行 |
 |---|---|---|---|
 | PostgreSQL | 同梱 bitnami 16.6(synology-csi-nfs) | CNPG `gitlab-postgres` 17(qnap-iscsi 10Gi) | CNPG の initdb.import(pg_dump / pg_restore) |
@@ -14,7 +17,7 @@ chart 9.11.16(GitLab 18.11.14)のまま, 同梱 PostgreSQL / Redis / MinIO を�
 - GitLab values: `deploy/gitlab/gitlab/values/values.yaml`(旧: `helm/gitlab/values.yaml`)
 - 接続用 Secret: `deploy/gitlab/gitlab/manifests/`, `deploy/gitlab/postgres/manifests/postgres-app-external-secret.yaml`
 - CNPG Cluster: `deploy/gitlab/postgres/manifests/cluster.yaml`(**停止後に apply する**)
-- 移行用(一回限り): `deploy/gitlab/gitlab/migration/`
+- 移行用(一回限り): `deploy/gitlab/gitlab/migration/`(移行完了後に削除. 内容はコミット 8995e31 を参照)
 
 切替前の調査結果(2026-11-11): DB 191MB(gitlabhq_production のみ), MinIO 14.7MB, Gitaly 11MB.
 
@@ -40,11 +43,27 @@ sed 's/^  name: gitlab-postgres$/  name: gitlab-postgres-rehearsal/' deploy/gitl
 kubectl -n gitlab get cluster gitlab-postgres-rehearsal -w     # "Cluster in healthy state" まで待つ
 kubectl -n gitlab logs -l cnpg.io/cluster=gitlab-postgres-rehearsal,cnpg.io/jobRole=import --tail=-1 | grep -iE 'error|warn'
 
-# 旧 DB と比較(テーブル数, 拡張, schema_migrations 件数)
-Q="select (select count(*) from pg_tables where schemaname='public'), (select string_agg(extname, ',' order by extname) from pg_extension), (select count(*) from schema_migrations)"
-kubectl -n gitlab exec gitlab-postgresql-0 -c postgresql -- sh -c "PGPASSWORD=\$POSTGRES_POSTGRES_PASSWORD psql -U postgres -d gitlabhq_production -Atc \"$Q\""
-kubectl -n gitlab exec gitlab-postgres-rehearsal-1 -- psql -d gitlabhq_production -Atc "$Q"
+# 旧 DB と比較
+# Q: テーブル数(全スキーマ), 拡張, schema_migrations / users / projects / p_ci_builds / issues / notes / events の件数
+# S: スキーマごとのオブジェクト数(パーティション用スキーマ gitlab_partitions_* を含む)
+# ※ ci_builds はパーティション化されて p_ci_builds になっている
+Q="select (select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema')), (select string_agg(extname, ',' order by extname) from pg_extension), (select count(*) from schema_migrations), (select count(*) from users), (select count(*) from projects), (select count(*) from p_ci_builds), (select count(*) from issues), (select count(*) from notes), (select count(*) from events)"
+S="select string_agg(nspname||':'||c, ',' order by nspname) from (select n.nspname, count(*) c from pg_class r join pg_namespace n on n.oid=r.relnamespace where n.nspname not in ('pg_catalog','information_schema','pg_toast') group by 1) x"
+for q in "$Q" "$S"; do
+  kubectl -n gitlab exec gitlab-postgresql-0 -c postgresql -- sh -c "PGPASSWORD=\$POSTGRES_POSTGRES_PASSWORD psql -U postgres -d gitlabhq_production -Atc \"$q\""
+  kubectl -n gitlab exec gitlab-postgres-rehearsal-1 -c postgres -- psql -d gitlabhq_production -Atc "$q"
+done
+# 旧 / 新 の各行が一致すること
+
+# gitlab ユーザー(gitlab-postgres-app のパスワード)で Service 経由で接続できること
+kubectl -n gitlab get secret gitlab-postgres-app -o jsonpath='{.data.password}' | base64 -d \
+  | kubectl -n gitlab exec -i gitlab-postgres-rehearsal-1 -c postgres -- sh -c \
+    'read -r PGPASSWORD; export PGPASSWORD; psql "host=gitlab-postgres-rehearsal-rw.gitlab.svc user=gitlab dbname=gitlabhq_production sslmode=require" -Atc "select current_user, count(*) from projects"'
 ```
+リハーサル結果(2026-11-12): 取込は約 2 分でエラーなし. Q / S とも一致
+(テーブル 2427, 拡張 btree_gist / pg_trgm / plpgsql, schema_migrations 7702, スキーマ別 public 6505 / static 1968 / dynamic 4470).
+public の全テーブルの owner が gitlab であること, gitlab ユーザーでの接続も確認済み.
+import ログの "error" / "warning" の一致はテーブル名(error_tracking_*)と initdb の定型警告のみで問題なし.
 後片付け(qnap-iscsi は Retain のため, PV を Delete に変えてから消すと QNAP 側のボリュームも削除される)
 ```bash
 PV=$(kubectl -n gitlab get pvc gitlab-postgres-rehearsal-1 -o jsonpath='{.spec.volumeName}')
@@ -63,7 +82,8 @@ helm template gitlab gitlab/gitlab -n gitlab --version 9.11.16 -f deploy/gitlab/
 - 変更: DB 接続先 `gitlab-postgres-rw`, Redis 接続先 `gitlab-valkey`, オブジェクトストレージ接続 Secret, registry storage, toolbox の backup 設定, runner の cache 設定, Gitaly の volumeClaimTemplates(qnap-iscsi 10Gi)
 
 ### 0-4. 旧 PV を Retain に変更
-helm upgrade で MinIO の PVC が削除されるため, **必ず切替前に実施する**.
+誤操作で旧 PVC を削除してもデータが残るよう, **必ず切替前に実施する**.
+(当初は helm upgrade で MinIO の PVC が削除されると想定していたが, 実際は `helm.sh/resource-policy: keep` により残った)
 ```bash
 for pv in $(kubectl get pv -o jsonpath='{range .items[?(@.spec.claimRef.namespace=="gitlab")]}{.metadata.name} {.spec.claimRef.name}{"\n"}{end}' \
             | awk '$2 ~ /^(data-gitlab-postgresql-0|redis-data-gitlab-redis-master-0|gitlab-minio|repo-data-gitlab-gitaly-0)$/ {print $1}'); do
@@ -119,11 +139,17 @@ kubectl apply -f deploy/gitlab/postgres/manifests/cluster.yaml
 kubectl -n gitlab get cluster gitlab-postgres -w      # "Cluster in healthy state" まで待つ
 kubectl -n gitlab logs -l cnpg.io/cluster=gitlab-postgres,cnpg.io/jobRole=import --tail=-1 | grep -iE 'error|warn'
 
-# 0-2 と同じクエリ(Q)で旧 DB と一致することを確認
-kubectl -n gitlab exec gitlab-postgresql-0 -c postgresql -- sh -c "PGPASSWORD=\$POSTGRES_POSTGRES_PASSWORD psql -U postgres -d gitlabhq_production -Atc \"$Q\""
-kubectl -n gitlab exec gitlab-postgres-1 -- psql -d gitlabhq_production -Atc "$Q"
+# 0-2 と同じクエリ(Q, S)で旧 DB と一致することを確認(Q, S は 0-2 で定義したものを使う)
+for q in "$Q" "$S"; do
+  kubectl -n gitlab exec gitlab-postgresql-0 -c postgresql -- sh -c "PGPASSWORD=\$POSTGRES_POSTGRES_PASSWORD psql -U postgres -d gitlabhq_production -Atc \"$q\""
+  kubectl -n gitlab exec gitlab-postgres-1 -c postgres -- psql -d gitlabhq_production -Atc "$q"
+done
+
+# gitlab ユーザーで Service 経由で接続できること
+kubectl -n gitlab get secret gitlab-postgres-app -o jsonpath='{.data.password}' | base64 -d \
+  | kubectl -n gitlab exec -i gitlab-postgres-1 -c postgres -- sh -c \
+    'read -r PGPASSWORD; export PGPASSWORD; psql "host=gitlab-postgres-rw.gitlab.svc user=gitlab dbname=gitlabhq_production sslmode=require" -Atc "select current_user, count(*) from projects"'
 ```
-gitlab ユーザー(gitlab-postgres-app のパスワード)での接続は, 6 の helm upgrade 後に migrations Job と webservice の起動で確認できる.
 
 ---
 
@@ -172,8 +198,8 @@ kubectl -n gitlab delete pvc gitaly-old        # 旧 PV は Released(Retain)で�
 ```bash
 helm upgrade gitlab gitlab/gitlab -n gitlab --version 9.11.16 -f deploy/gitlab/gitlab/values/values.yaml --timeout 20m
 ```
-helm upgrade で削除されるもの: MinIO(PVC `gitlab-minio` を含む), PostgreSQL / Redis の StatefulSet.
-StatefulSet の PVC(`data-gitlab-postgresql-0`, `redis-data-gitlab-redis-master-0`)は残る.
+helm upgrade で削除されるもの: MinIO の Deployment / Service / Ingress, PostgreSQL / Redis の StatefulSet.
+PVC(`gitlab-minio`(resource-policy: keep), `data-gitlab-postgresql-0`, `redis-data-gitlab-redis-master-0`)は残るため 8 で削除する.
 
 replicas を chart が指定しない Deployment は 0 のままのため戻す(HPA の min 値)
 ```bash
@@ -208,25 +234,37 @@ $TB s3cmd ls s3://gitlab-backups/
 ---
 
 ## 8. 旧リソースの削除(動作確認後すぐ)
-旧 PV は Delete に戻してから削除すると, synology 側のボリュームも削除される.
+旧 PV を Delete に戻してから PVC を削除すると, PV と synology 側のボリュームも削除される.
 ```bash
-# 旧 PVC(StatefulSet 由来で残っているもの)
-kubectl -n gitlab delete pvc data-gitlab-postgresql-0 redis-data-gitlab-redis-master-0
+# 旧 PV が使われていないこと(attach されていないこと)を確認
+kubectl get pv -o custom-columns=NAME:.metadata.name,CLAIM:.spec.claimRef.name,STATUS:.status.phase,RECLAIM:.spec.persistentVolumeReclaimPolicy \
+  | grep -E 'data-gitlab-postgresql-0|redis-data-gitlab-redis-master-0|gitlab-minio|gitaly-old'
+kubectl get volumeattachment -o custom-columns=PV:.spec.source.persistentVolumeName,NODE:.spec.nodeName | grep <PV名>   # 何も出ないこと
 
-# 旧 PV(4 個: postgresql / redis / minio / gitaly)
-kubectl get pv | grep -E 'Released' | grep -E 'gitlab/(data-gitlab-postgresql-0|redis-data-gitlab-redis-master-0|gitlab-minio|repo-data-gitlab-gitaly-0)'
+# 1. 旧 PV(4 個: postgresql / redis / minio / gitaly)を Delete に戻す
+#    Gitaly の旧 PV は PVC 削除済み(Released)のため, この時点で削除される
 kubectl patch pv <PV名> -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'   # 4 個それぞれ
 
-# 旧 Secret(chart が生成したもの)
+# 2. 残っている旧 PVC を削除する(対応する PV も削除される)
+kubectl -n gitlab delete pvc data-gitlab-postgresql-0 redis-data-gitlab-redis-master-0 gitlab-minio
+kubectl get pv | grep <PV名>     # 4 個とも消えていること
+```
+
+CNPG の取込元定義を削除する(旧 Secret `gitlab-postgresql-password` を参照しているため, Secret より先に行う)
+- `deploy/gitlab/postgres/manifests/cluster.yaml` から `bootstrap.initdb.import` と `externalClusters` を削除し,
+  `kubectl diff` / `kubectl apply --dry-run=server` の後に apply する(Pod の再起動は発生しない).
+
+旧 Secret(chart が生成したもの)
+```bash
+# helm の manifest と Pod から参照されていないことを確認してから削除
+helm -n gitlab get manifest gitlab | grep -cE 'gitlab-minio-secret|gitlab-postgresql-password'   # 0
 kubectl -n gitlab delete secret gitlab-minio-secret gitlab-postgresql-password
 # gitlab-registry-database-password は Registry メタデータ DB の検討が終わるまで残す
 ```
-CNPG の取込元定義を削除する(旧 PostgreSQL と Secret が無くなったため)
-- `deploy/gitlab/postgres/manifests/cluster.yaml` から `bootstrap.initdb.import` と `externalClusters` を削除し, `kubectl apply --dry-run=server` の後に apply する.
 
 リポジトリ
 - `git rm helm/gitlab/values.yaml`
-- `deploy/gitlab/gitlab/migration/` を削除する(または記録として残す)
+- `git rm -r deploy/gitlab/gitlab/migration/`(内容はコミット 8995e31 を参照)
 
 ---
 
