@@ -1,0 +1,126 @@
+# GitLab のメトリクス収集 (kube-prometheus-stack: namespace prometheus)
+# Prometheus は release: prometheus ラベルの ServiceMonitor / PodMonitor のみを対象にする。
+# chart が生成する Monitor には release: gitlab が固定で付き (追加ラベルで上書きできない)、対象にならないため、
+# chart 側の Monitor は作らず、ここで定義する。メトリクスのエンドポイントの有効化は values.yaml で行う。
+#   webservice (puma)  : 8083 http-metrics-ws  (chart デフォルトで有効)
+#   workhorse          : 9229 http-metrics-wh  (webservice.workhorse.metrics.enabled)
+#   gitaly             : 9236 http-metrics     (chart デフォルトで有効)
+#   gitlab-exporter    : 9168 http-metrics     (chart デフォルトで有効)
+#   kas                : 8151 http-metrics     (chart デフォルトで有効)
+#   registry           : 5001 http-metrics     (registry.metrics.enabled)
+#   sidekiq            : 3807 http-metrics     (chart デフォルトで有効。Service がないため PodMonitor)
+#   gitlab-runner      : 9252 metrics          (gitlab-runner.metrics.enabled。Service がないため PodMonitor)
+# gitlab-shell は sshDaemon が openssh のためメトリクスなし。
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitlab-webservice
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: webservice
+      release: gitlab
+  endpoints:
+  - port: http-metrics-ws
+    path: /metrics
+  - port: http-metrics-wh
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitlab-gitaly
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gitaly
+      release: gitlab
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitlab-gitlab-exporter
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gitlab-exporter
+      release: gitlab
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitlab-kas
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: kas
+      release: gitlab
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitlab-registry
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: registry
+      release: gitlab
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gitlab-sidekiq
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: sidekiq
+      release: gitlab
+  podMetricsEndpoints:
+  - port: http-metrics
+    path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gitlab-runner
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gitlab-gitlab-runner
+      release: gitlab
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics

@@ -83,6 +83,9 @@ registry:
       secret: gitlab-registry-database
       key: password
     sslmode: require
+  ## メトリクス (debug ポート 5001)。ServiceMonitor は deploy/gitlab/gitlab/manifests/monitors.yaml
+  metrics:
+    enabled: true
   storage:
     secret: gitlab-registry-storage
     key: config
@@ -91,6 +94,11 @@ registry:
       disable: true
 
 gitlab:
+  webservice:
+    workhorse:
+      ## メトリクス (ポート 9229)。ServiceMonitor は deploy/gitlab/gitlab/manifests/monitors.yaml
+      metrics:
+        enabled: true
   gitaly:
     persistence:
       storageClass: qnap-iscsi
@@ -112,6 +120,9 @@ gitlab:
             restorePasswordKey: password
 
 gitlab-runner:
+  ## メトリクス (ポート 9252)。PodMonitor は deploy/gitlab/gitlab/manifests/monitors.yaml
+  metrics:
+    enabled: true
   runners:
     cache:
       # 認証情報 (accesskey / secretkey)

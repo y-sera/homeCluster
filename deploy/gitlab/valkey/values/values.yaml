@@ -26,5 +26,11 @@ auth:
       permissions: "~* &* +@all"
       passwordKey: default
 
+# redis_exporter サイドカー (ポート 9121)。認証は auth.usersExistingSecret の default ユーザーを chart が自動で設定する
 metrics:
-  enabled: false
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    # kube-prometheus-stack は release: prometheus ラベルの ServiceMonitor のみを対象にする
+    extraLabels:
+      release: prometheus

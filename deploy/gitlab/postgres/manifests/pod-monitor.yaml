@@ -1,0 +1,17 @@
+# CNPG Cluster gitlab-postgres のメトリクス収集 (各インスタンスの metrics ポート 9187)
+# Cluster の spec.monitoring.enablePodMonitor は非推奨のため、PodMonitor を個別に定義する。
+# kube-prometheus-stack は release: prometheus ラベルの PodMonitor のみを対象にする。
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gitlab-postgres
+  namespace: gitlab
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: gitlab-postgres
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+  - port: metrics
