@@ -2,7 +2,7 @@
 # chart: gitlab/gitlab (https://charts.gitlab.io/)。helm CLI で管理する (ArgoCD 管理外)。
 #   ArgoCD は GitLab 上のこのリポジトリを参照しているため、GitLab 自体を ArgoCD で管理すると障害時に復旧できなくなる。
 #
-#   helm upgrade gitlab gitlab/gitlab -n gitlab --version 9.11.16 -f deploy/gitlab/gitlab/values/values.yaml
+#   helm upgrade gitlab gitlab/gitlab -n gitlab --version 10.5.5 -f deploy/gitlab/gitlab/values/values.yaml
 #
 # chart のデフォルトから変更する値のみ記載する。
 # 旧 values (helm/gitlab/values.yaml, 2026-11-12 削除) は chart デフォルトの全量コピーだったため、外部化に合わせて差分のみに整理した。
@@ -17,10 +17,11 @@ global:
   hosts:
     domain: cluster.orenet.net
 
+  ## Ingress (cilium)。chart 10.x から Ingress はデフォルト無効 (Gateway API が既定) のため明示的に有効化する
   ingress:
+    enabled: true
     provider: cilium
     class: cilium
-    configureCertmanager: false
     tls:
       enabled: true
       secretName: gitlab-cert
@@ -46,9 +47,11 @@ global:
       # Valkey の ACL ユーザー default のパスワード (chart のデフォルトのキー名は "secret")
       key: default
 
-  ## 同梱 MinIO は使用しない (RustFS へ移行)
-  minio:
+  ## Gateway API / Envoy Gateway (chart 10.x の既定) は使用せず、cilium の Ingress を使う
+  gatewayApi:
     enabled: false
+    installEnvoy: false
+    configureCertmanager: false
 
   appConfig:
     ## オブジェクトストレージ (統合設定)。lfs / artifacts / uploads / packages はこの接続設定を共用する。
@@ -61,17 +64,12 @@ global:
         key: connection
 
 ## 同梱コンポーネントは使用しない
+## (同梱 PostgreSQL / Redis / MinIO は chart 10.0 で削除済み。nginx-ingress は chart 10.x で既定無効)
 installCertmanager: false
 certmanager:
   installCRDs: false
-nginx-ingress:
-  enabled: false
 # kube-prometheus-stack と重複するため無効化
 prometheus:
-  install: false
-postgresql:
-  install: false
-redis:
   install: false
 
 registry:
