@@ -1,0 +1,66 @@
+# Harbor PVCs on QNAP (trident iSCSI). Referenced from Harbor values via
+# persistence.persistentVolumeClaim.*.existingClaim.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-registry-data
+  namespace: harbor
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-database-data
+  namespace: harbor
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-redis-data
+  namespace: harbor
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-trivy-data
+  namespace: harbor
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-jobservice-data
+  namespace: harbor
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 1Gi

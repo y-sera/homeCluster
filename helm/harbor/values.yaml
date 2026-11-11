@@ -140,19 +140,19 @@ persistence:
     registry:
       # Use the existing PVC which must be created manually before bound,
       # and specify the "subPath" if the PVC is shared with other components
-      existingClaim: ""
+      existingClaim: "harbor-registry-data"
       # Specify the "storageClass" used to provision the volume. Or the default
       # StorageClass will be used (the default).
       # Set it to "-" to disable dynamic provisioning
-      storageClass: "synology-csi-delete"
+      storageClass: "qnap-iscsi"
       subPath: ""
       accessMode: ReadWriteOnce
       size: 100Gi
       annotations: {}
     jobservice:
       jobLog:
-        existingClaim: ""
-        storageClass: "synology-csi-delete"
+        existingClaim: "harbor-jobservice-data"
+        storageClass: "qnap-iscsi"
         subPath: ""
         accessMode: ReadWriteOnce
         size: 1Gi
@@ -160,8 +160,8 @@ persistence:
     # If external database is used, the following settings for database will
     # be ignored
     database:
-      existingClaim: ""
-      storageClass: "synology-csi-delete"
+      existingClaim: "harbor-database-data"
+      storageClass: "qnap-iscsi"
       subPath: ""
       accessMode: ReadWriteOnce
       size: 1Gi
@@ -169,15 +169,15 @@ persistence:
     # If external Redis is used, the following settings for Redis will
     # be ignored
     redis:
-      existingClaim: ""
-      storageClass: "synology-csi-delete"
+      existingClaim: "harbor-redis-data"
+      storageClass: "qnap-iscsi"
       subPath: ""
       accessMode: ReadWriteOnce
       size: 1Gi
       annotations: {}
     trivy:
-      existingClaim: ""
-      storageClass: "synology-csi-delete"
+      existingClaim: "harbor-trivy-data"
+      storageClass: "qnap-iscsi"
       subPath: ""
       accessMode: ReadWriteOnce
       size: 5Gi
