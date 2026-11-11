@@ -1,0 +1,63 @@
+# GitLab 用 PostgreSQL (CloudNativePG)
+# 接続先: gitlab-postgres-rw.gitlab.svc:5432 / DB: gitlabhq_production / ユーザー: gitlab
+#
+# 初回作成時に, 同梱 PostgreSQL (bitnami, 16.6) から gitlabhq_production を
+# pg_dump / pg_restore で取り込む (initdb.import, microservice 方式).
+# 取り込みは Cluster 作成時の 1 回のみ実行されるため, **GitLab を停止してから apply する** (Phase 4 の切替手順内).
+#   kubectl apply -f deploy/gitlab/postgres/manifests/cluster.yaml
+#   kubectl -n gitlab get cluster gitlab-postgres -w            # "Cluster in healthy state" になるまで待つ
+#   kubectl -n gitlab logs -l cnpg.io/cluster=gitlab-postgres,cnpg.io/jobRole=import  # 取り込みログ
+#
+# 取り込み元 (2026-11 時点の調査結果):
+#   DB は gitlabhq_production のみ (191MB, owner gitlab). 拡張は pg_trgm / btree_gist.
+#   registry メタデータ DB は未使用.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: gitlab-postgres
+  namespace: gitlab
+spec:
+  # バックエンドは NAS 1 台のため単一インスタンスとする (Valkey / RustFS と同じ方針)
+  instances: 1
+  # GitLab 19 は PostgreSQL 17 が必須
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
+
+  storage:
+    storageClass: qnap-iscsi
+    size: 10Gi
+
+  postgresql:
+    parameters:
+      # 現行は 100 (接続数の実績は 50 前後). webservice / sidekiq の増加に備えて余裕を持たせる
+      max_connections: "200"
+      shared_buffers: 256MB
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  bootstrap:
+    initdb:
+      database: gitlabhq_production
+      owner: gitlab
+      secret:
+        name: gitlab-postgres-app
+      import:
+        type: microservice
+        databases:
+        - gitlabhq_production
+        source:
+          externalCluster: gitlab-postgresql-bundled
+
+  externalClusters:
+  # 取り込み元: GitLab chart 同梱の PostgreSQL (切替後は不要. 旧 PostgreSQL 削除後もこの定義は残っていて問題ない)
+  - name: gitlab-postgresql-bundled
+    connectionParameters:
+      host: gitlab-postgresql.gitlab.svc
+      user: postgres
+      dbname: postgres
+      sslmode: disable
+    password:
+      name: gitlab-postgresql-password
+      key: postgresql-postgres-password

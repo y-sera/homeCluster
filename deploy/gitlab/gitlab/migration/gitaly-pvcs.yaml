@@ -1,0 +1,36 @@
+# 【移行用・一回限り】Gitaly のデータ移行用 PVC
+# 手順: memo/gitlab_externalization_runbook.md
+#
+# 1) gitaly-old: 旧 PV (synology-csi) を再バインドする PVC (コピー元)。
+#    旧 PVC (repo-data-gitlab-gitaly-0) 削除後、旧 PV の claimRef を外してから apply する。
+# 2) repo-data-gitlab-gitaly-0: 新 PV (qnap-iscsi)。
+#    StatefulSet gitlab-gitaly の volumeClaimTemplates (repo-data) と同名にしておくことで、
+#    helm upgrade 後に再作成される StatefulSet がこの PVC をそのまま使用する。
+#    容量・StorageClass は deploy/gitlab/gitlab/values/values.yaml (gitlab.gitaly.persistence) と合わせる。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitaly-old
+  namespace: gitlab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: synology-csi-delete
+  volumeName: pvc-75466582-09a8-4278-b65d-8dc73a1d7f65
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: repo-data-gitlab-gitaly-0
+  namespace: gitlab
+  labels:
+    app: gitaly
+    release: gitlab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: qnap-iscsi
+  resources:
+    requests:
+      storage: 10Gi

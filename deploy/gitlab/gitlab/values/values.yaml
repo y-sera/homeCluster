@@ -1,0 +1,116 @@
+# GitLab 本体 (helm release: gitlab / namespace: gitlab)
+# chart: gitlab/gitlab (https://charts.gitlab.io/)。helm CLI で管理する (ArgoCD 管理外)。
+#   ArgoCD は GitLab 上のこのリポジトリを参照しているため、GitLab 自体を ArgoCD で管理すると障害時に復旧できなくなる。
+#
+#   helm upgrade gitlab gitlab/gitlab -n gitlab --version 9.11.16 -f deploy/gitlab/gitlab/values/values.yaml
+#
+# chart のデフォルトから変更する値のみ記載する。
+# 旧 values (helm/gitlab/values.yaml) は chart デフォルトの全量コピーだったため、外部化に合わせて差分のみに整理した。
+#
+# 外部サービス (いずれも namespace gitlab)
+#   PostgreSQL : CNPG Cluster gitlab-postgres   (deploy/gitlab/postgres)
+#   Redis      : Valkey gitlab-valkey           (deploy/gitlab/valkey)
+#   S3         : RustFS gitlab-rustfs           (deploy/gitlab/rustfs)
+#   接続用 Secret は deploy/gitlab/{gitlab,postgres}/manifests の ExternalSecret が作成する。
+
+global:
+  hosts:
+    domain: cluster.orenet.net
+
+  ingress:
+    provider: cilium
+    class: cilium
+    configureCertmanager: false
+    tls:
+      enabled: true
+      secretName: gitlab-cert
+
+  ## PostgreSQL (CNPG)
+  psql:
+    host: gitlab-postgres-rw.gitlab.svc
+    port: 5432
+    database: gitlabhq_production
+    username: gitlab
+    password:
+      useSecret: true
+      secret: gitlab-postgres-app
+      key: password
+
+  ## Redis (Valkey)。キャッシュ / キュー / セッションなど全用途で共用する
+  redis:
+    host: gitlab-valkey.gitlab.svc
+    port: 6379
+    auth:
+      enabled: true
+      secret: gitlab-valkey
+      # Valkey の ACL ユーザー default のパスワード (chart のデフォルトのキー名は "secret")
+      key: default
+
+  ## 同梱 MinIO は使用しない (RustFS へ移行)
+  minio:
+    enabled: false
+
+  appConfig:
+    ## オブジェクトストレージ (統合設定)。lfs / artifacts / uploads / packages はこの接続設定を共用する。
+    ## バケット名と各種別の有効・無効は chart のデフォルトのまま (旧 MinIO と同じ)。
+    object_store:
+      enabled: true
+      proxy_download: true
+      connection:
+        secret: gitlab-object-storage
+        key: connection
+
+## 同梱コンポーネントは使用しない
+installCertmanager: false
+certmanager:
+  installCRDs: false
+nginx-ingress:
+  enabled: false
+# kube-prometheus-stack と重複するため無効化
+prometheus:
+  install: false
+postgresql:
+  install: false
+redis:
+  install: false
+
+registry:
+  storage:
+    secret: gitlab-registry-storage
+    key: config
+    # RustFS はクラスター外に公開しないため、クライアントを S3 へリダイレクトさせず registry 経由で配信する
+    redirect:
+      disable: true
+
+gitlab:
+  gitaly:
+    persistence:
+      storageClass: qnap-iscsi
+      size: 10Gi
+  toolbox:
+    backups:
+      objectStorage:
+        config:
+          secret: gitlab-backup-storage
+          key: config
+
+gitlab-runner:
+  runners:
+    cache:
+      # 認証情報 (accesskey / secretkey)
+      secretName: gitlab-runner-cache
+    config: |
+      [[runners]]
+        [runners.kubernetes]
+        image = "ubuntu:22.04"
+          [runners.kubernetes.pod_annotations]
+            "container.apparmor.security.beta.kubernetes.io/build" = "unconfined"
+        [runners.cache]
+          Type = "s3"
+          Path = "gitlab-runner"
+          Shared = true
+          [runners.cache.s3]
+            ServerAddress = "gitlab-rustfs-svc.gitlab.svc:9000"
+            BucketName = "runner-cache"
+            BucketLocation = "us-east-1"
+            Insecure = true

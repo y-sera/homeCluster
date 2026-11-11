@@ -1,0 +1,42 @@
+# 【移行用・一回限り】Gitaly のリポジトリデータを旧 PV → 新 PV にコピーする
+# 手順: memo/gitlab_externalization_runbook.md
+# 所有者 (uid 1000)・パーミッション・ハードリンク等を保持するため root で rsync -aHAX を実行する。
+# コピー後に rsync をチェックサム付きのドライランで再実行し、差分が無いことを確認する。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-gitaly-copy
+  namespace: gitlab
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: rsync
+        image: alpine:3.22.8
+        command:
+        - sh
+        - -ec
+        - |
+          apk add --no-cache rsync >/dev/null
+          rsync -aHAX --numeric-ids --delete --exclude=/lost+found /old/ /new/
+          echo "--- verify (差分があればファイル名が表示される)"
+          rsync -aHAXn --checksum --numeric-ids --delete --exclude=/lost+found --itemize-changes /old/ /new/
+          echo "--- du (old / new)"
+          du -sh /old /new
+          ls -ln /new
+        volumeMounts:
+        - name: old
+          mountPath: /old
+          readOnly: true
+        - name: new
+          mountPath: /new
+      volumes:
+      - name: old
+        persistentVolumeClaim:
+          claimName: gitaly-old
+          readOnly: true
+      - name: new
+        persistentVolumeClaim:
+          claimName: repo-data-gitlab-gitaly-0

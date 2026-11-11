@@ -1,0 +1,94 @@
+# 【移行用・一回限り】同梱 MinIO → RustFS のオブジェクトコピー
+# 手順: memo/gitlab_externalization_runbook.md
+# minio/mc のイメージは配布が終了しているため rclone を使用する。
+# 各バケットを copy した後に check で件数・サイズ・ハッシュを照合する (差分があれば Job は失敗する)。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-object-storage-copy
+  namespace: gitlab
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: rclone
+        image: rclone/rclone:1.75.2
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        # コピー元: 同梱 MinIO
+        - name: RCLONE_CONFIG_OLD_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_OLD_PROVIDER
+          value: Minio
+        - name: RCLONE_CONFIG_OLD_ENDPOINT
+          value: http://gitlab-minio-svc.gitlab.svc:9000
+        - name: RCLONE_CONFIG_OLD_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-minio-secret
+              key: accesskey
+        - name: RCLONE_CONFIG_OLD_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-minio-secret
+              key: secretkey
+        # コピー先: RustFS
+        - name: RCLONE_CONFIG_NEW_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_NEW_PROVIDER
+          value: Other
+        - name: RCLONE_CONFIG_NEW_ENDPOINT
+          value: http://gitlab-rustfs-svc.gitlab.svc:9000
+        - name: RCLONE_CONFIG_NEW_FORCE_PATH_STYLE
+          value: "true"
+        - name: RCLONE_CONFIG_NEW_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: RCLONE_CONFIG_NEW_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        - name: BUCKETS
+          value: >-
+            git-lfs
+            gitlab-artifacts
+            gitlab-uploads
+            gitlab-packages
+            gitlab-mr-diffs
+            gitlab-terraform-state
+            gitlab-ci-secure-files
+            gitlab-dependency-proxy
+            gitlab-pages
+            gitlab-backups
+            tmp
+            registry
+            runner-cache
+        command:
+        - sh
+        - -ec
+        - |
+          for b in $BUCKETS; do
+            echo "=== $b"
+            rclone copy "old:$b" "new:$b" --stats-one-line -v
+            rclone check "old:$b" "new:$b" --one-way
+          done
+          echo "--- size (old / new)"
+          for b in $BUCKETS; do
+            echo "$b: $(rclone size "old:$b" --json) / $(rclone size "new:$b" --json)"
+          done
