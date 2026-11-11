@@ -1,0 +1,20 @@
+# GitLab の Grafana ダッシュボード (kube-prometheus-stack の Grafana: https://grafana.cluster.orenet.net)
+# Grafana の sidecar が全 namespace の grafana_dashboard: "1" ラベル付き ConfigMap を読み込む。
+#   kubectl apply -k deploy/gitlab/gitlab/dashboards --server-side
+#
+# gitlab.json は自作 (uid: gitlab-overview)。GitLab 公式 (gitlab-org/grafana-dashboards) は Omnibus 版の
+# job 名を前提にしているため使わず、この環境の job 名 / ラベルに合わせて作成した。
+# メトリクスの収集設定は deploy/gitlab/gitlab/manifests/monitors.yaml。
+# Grafana 上で編集した場合は、Export (JSON) した内容でこのファイルを置き換えてから apply する
+# (sidecar の読み込み分は ConfigMap が正。画面上の変更は ConfigMap の再読み込みで上書きされる)。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gitlab
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+- name: grafana-dashboard-gitlab
+  files:
+  - gitlab.json
