@@ -1,0 +1,20 @@
+# CNPG Cluster の Grafana ダッシュボード (kube-prometheus-stack の Grafana: https://grafana.cluster.orenet.net)
+# Grafana の sidecar が全 namespace の grafana_dashboard: "1" ラベル付き ConfigMap を読み込む。
+#   kubectl apply -k deploy/gitlab/postgres/dashboards --server-side
+#   (JSON が約 250KB あり、client-side apply では last-applied annotation の上限 256KiB を超える恐れがあるため server-side で適用する)
+#
+# cnpg-cluster.json の出典: cloudnative-pg/grafana-dashboards の helm chart "cluster" 0.0.5 (Apache-2.0) の grafana-dashboard.json
+#   変更点: 式 (Expression) データソースの uid "${DS_EXPRESSION}" を "__expr__" に置換
+#   (sidecar 経由の読み込みでは __inputs が解決されないため。Prometheus 側は変数 DS_PROMETHEUS で選択できる)
+#   operator のメトリクス (controller_runtime_*) は収集していないため、operator 関連のパネルは空になる
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gitlab
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+- name: grafana-dashboard-cnpg-cluster
+  files:
+  - cnpg-cluster.json

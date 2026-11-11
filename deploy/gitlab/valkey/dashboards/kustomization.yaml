@@ -1,0 +1,17 @@
+# Valkey (redis_exporter) の Grafana ダッシュボード (kube-prometheus-stack の Grafana: https://grafana.cluster.orenet.net)
+# Grafana の sidecar が全 namespace の grafana_dashboard: "1" ラベル付き ConfigMap を読み込む。
+#   kubectl apply -k deploy/gitlab/valkey/dashboards --server-side
+#
+# redis-exporter.json の出典: oliver006/redis_exporter v1.79.0 (exporter と同じバージョン) の
+#   contrib/grafana_prometheus_redis_dashboard.json (MIT)。変更なし
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gitlab
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+- name: grafana-dashboard-valkey
+  files:
+  - redis-exporter.json
