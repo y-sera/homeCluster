@@ -16,7 +16,7 @@ spec:
       - $configs/deploy/external-dns/coredns/values/values.yaml
       releaseName: coredns
     chart: coredns
-    targetRevision: 1.45.2
+    targetRevision: 1.50.5
   destination:
     server: "https://kubernetes.default.svc"
     namespace: external-dns

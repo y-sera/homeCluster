@@ -17,6 +17,8 @@ sources:
 - ingress
 - gateway-httproute
 - gateway-grpcroute
-- gateway-tlsroute
+# gateway-tlsroute は外している: external-dns 0.22 以降は TLSRoute v1 (Gateway API v1.5+) 前提だが、
+# クラスタの CRD は v1alpha2/v1alpha3 のみ (Gateway API v1.4.1 experimental)。TLSRoute は未使用。
+# Gateway API を v1.5 以上に上げたら戻す。
 - gateway-tcproute
 - gateway-udproute
