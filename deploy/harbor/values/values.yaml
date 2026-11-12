@@ -44,18 +44,23 @@ persistence:
 updateStrategy:
   type: Recreate
 
-# Pinned explicitly (same as the chart defaults at the time of install) so a
-# future chart default change cannot break existing data. secretKey encrypts
-# values stored in the database and must never change.
-# TODO: move these to Vault/ESO.
-secretKey: "not-a-secure-key"
+# secretKey (encrypts values stored in the database; must never change) and the
+# initial admin password come from Vault via ESO
+# (deploy/harbor/manifests/core-secrets-external-secret.yaml).
+existingSecretSecretKey: harbor-core-secrets
+existingSecretAdminPassword: harbor-core-secrets
+
+# The chart has no existingSecret option for the internal database password, so
+# it stays here. Pinned explicitly so a chart default change cannot break it.
 database:
   type: internal
   internal:
     password: "changeit"
 
 core:
-  secret: "f1GfqRHfBWO0NmLI"
+  # Component shared secret comes from Vault via ESO
+  # (deploy/harbor/manifests/core-secrets-external-secret.yaml).
+  existingSecret: harbor-core-secrets
   # Token signing key/cert and CSRF key come from Vault via ESO
   # (deploy/harbor/manifests/core-external-secret.yaml) so renders are deterministic.
   secretName: harbor-core-token
