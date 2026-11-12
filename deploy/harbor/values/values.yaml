@@ -56,6 +56,10 @@ database:
 
 core:
   secret: "f1GfqRHfBWO0NmLI"
+  # Token signing key/cert and CSRF key come from Vault via ESO
+  # (deploy/harbor/manifests/core-external-secret.yaml) so renders are deterministic.
+  secretName: harbor-core-token
+  existingXsrfSecret: harbor-core-token
 
 jobservice:
   secret: "8PXHkwBXuH1r5f55"
