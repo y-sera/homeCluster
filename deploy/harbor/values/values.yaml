@@ -1,0 +1,68 @@
+# Harbor (goharbor/harbor chart) overrides only. Chart defaults are used for
+# everything else, including image tags. Chart version is pinned in
+# applications/harbor.yaml.
+
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: harbor-cert
+  ingress:
+    hosts:
+      core: harbor.cluster.orenet.net
+    className: cilium
+
+externalURL: https://harbor.cluster.orenet.net
+
+# PVCs are created in advance (deploy/harbor/manifests/pvc.yaml) on qnap-iscsi.
+persistence:
+  enabled: true
+  resourcePolicy: keep
+  persistentVolumeClaim:
+    registry:
+      existingClaim: harbor-registry-data
+      storageClass: qnap-iscsi
+      size: 100Gi
+    jobservice:
+      jobLog:
+        existingClaim: harbor-jobservice-data
+        storageClass: qnap-iscsi
+    database:
+      existingClaim: harbor-database-data
+      storageClass: qnap-iscsi
+    redis:
+      existingClaim: harbor-redis-data
+      storageClass: qnap-iscsi
+    trivy:
+      existingClaim: harbor-trivy-data
+      storageClass: qnap-iscsi
+  imageChartStorage:
+    type: filesystem
+
+updateStrategy:
+  type: Recreate
+
+# Pinned explicitly (same as the chart defaults at the time of install) so a
+# future chart default change cannot break existing data. secretKey encrypts
+# values stored in the database and must never change.
+# TODO: move these to Vault/ESO.
+secretKey: "not-a-secure-key"
+database:
+  type: internal
+  internal:
+    password: "changeit"
+
+core:
+  secret: "f1GfqRHfBWO0NmLI"
+
+jobservice:
+  secret: "8PXHkwBXuH1r5f55"
+
+registry:
+  secret: "KiOv9fRQJ7x0fOWE"
+  credentials:
+    username: harbor_registry_user
+    password: harbor_registry_password
+    htpasswdString: "harbor_registry_user:$2a$10$LupgjZjO1drxMwv6RgZwXu.sT.ueMG9Y9OPSGHa0laXao66kFFACy"

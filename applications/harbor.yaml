@@ -13,10 +13,10 @@ spec:
     path: chart
     helm:
       valueFiles:
-      - $configs/helm/harbor/values.yaml
+      - $configs/deploy/harbor/values/values.yaml
       releaseName: harbor
     chart: harbor
-    targetRevision: v1.18.1
+    targetRevision: v1.19.4
   destination:
     server: "https://kubernetes.default.svc"
     namespace: harbor
