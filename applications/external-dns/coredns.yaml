@@ -13,7 +13,7 @@ spec:
     path: chart
     helm:
       valueFiles:
-      - $configs/helm/external-dns-coredns/values.yaml
+      - $configs/deploy/external-dns/coredns/values/values.yaml
       releaseName: coredns
     chart: coredns
     targetRevision: 1.45.2

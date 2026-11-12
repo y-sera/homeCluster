@@ -1,0 +1,19 @@
+# external-dns のバックエンド用 etcd (bitnami/etcd chart) の overrides のみ。
+# chart version は applications/external-dns/etcd.yaml で固定。
+# 1 レプリカ・TLS なしの暫定構成 (memo/external-dns-backend-etcd_install_memo.md)。
+# データは external-dns が Ingress / Service などから再生成できるため、バックアップは取っていない。
+
+# bitnami の無償イメージ配布終了に伴い bitnamilegacy を利用 (更新は別途対応予定)
+image:
+  repository: bitnamilegacy/etcd
+volumePermissions:
+  image:
+    repository: bitnamilegacy/os-shell
+
+auth:
+  rbac:
+    create: false
+
+persistence:
+  storageClass: longhorn
+  size: 1Gi

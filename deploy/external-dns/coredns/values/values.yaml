@@ -1,0 +1,56 @@
+# external-dns 用 coredns (coredns/coredns chart) の overrides のみ。
+# chart version は applications/external-dns/coredns.yaml で固定。
+# クラスター外向けの DNS (192.168.2.64, cilium BGP の lbpool: external-dns から割り当て)。
+# kube-system の CoreDNS も cluster.orenet.net をここへ転送している。
+
+replicaCount: 3
+isClusterService: false
+serviceType: LoadBalancer
+customLabels:
+  lbpool: external-dns
+
+servers:
+- zones:
+  - zone: cluster.orenet.net
+    use_tcp: true
+  port: 53
+  plugins:
+  - name: errors
+  - name: health
+    configBlock: |-
+      lameduck 10s
+  - name: ready
+  - name: kubernetes
+    parameters: cluster.local in-addr.arpa ip6.arpa
+    configBlock: |-
+      pods insecure
+      fallthrough in-addr.arpa ip6.arpa
+      ttl 30
+  - name: prometheus
+    parameters: 0.0.0.0:9153
+  - name: forward
+    parameters: k8sapiserver.cluster.orenet.net 192.168.1.161
+  - name: rewrite
+    parameters: name regex .*\.flightctl\.cluster\.orenet\.net flightctl.cluster.orenet.net answer auto
+  - name: cache
+    parameters: 30
+  - name: loop
+  - name: reload
+  - name: loadbalance
+  - name: etcd
+    parameters: cluster.orenet.net
+    configBlock: |-
+      stubzones
+      path /skydns
+      endpoint http://etcd:2379
+- zones:
+  - zone: .
+  port: 53
+  plugins:
+  - name: forward
+    parameters: . 192.168.1.1
+  - name: errors
+  - name: cache
+    # NOTE: "parameter" (単数) は chart に無視されるため、実際は cache のデフォルト (3600s) で動作している。
+    # 移行時に挙動を変えないためそのまま残している。30s にする場合は "parameters" に直す。
+    parameter: 30

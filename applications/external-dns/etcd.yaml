@@ -13,7 +13,7 @@ spec:
     path: chart
     helm:
       valueFiles:
-      - $configs/helm/external-dns-etcd/values.yaml
+      - $configs/deploy/external-dns/etcd/values/values.yaml
       releaseName: etcd
     chart: etcd
     targetRevision: 12.0.18
