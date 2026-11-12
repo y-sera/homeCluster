@@ -1,0 +1,17 @@
+# kubelet-serving CSR (serverTLSBootstrap: true の kubelet が出す証明書要求) を自動承認する.
+# 承認条件: 申請者が system:node:<name>, CN/DNS SAN がノード名と一致し providerRegex にマッチ,
+#           IP SAN が providerIpPrefixes 内.
+
+# 許可するノード名 (DNS SAN)
+providerRegex: ^(master[0-9]+|worker[0-9]+|qnap-vm)$
+
+# 許可する IP SAN の範囲 (ノードの InternalIP)
+providerIpPrefixes:
+  - 192.168.1.0/24
+
+# ノードのショート名 (qnap-vm 等) はクラスタ内 DNS で解決できないため DNS 解決チェックを無効化する.
+# providerRegex と providerIpPrefixes で制限する.
+bypassDnsResolution: true
+
+# 条件に合わない CSR は deny せず無視する (手動承認の余地を残す)
+skipDenyStep: true
