@@ -1,0 +1,11 @@
+# ノードのドレインなどで同時に止まるメンバーを 1 台までにする (3 台中 2 台で quorum を維持)。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: etcd
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: etcd
+      app.kubernetes.io/instance: external-dns-etcd

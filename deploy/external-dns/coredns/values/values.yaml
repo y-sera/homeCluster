@@ -20,17 +20,14 @@ servers:
     configBlock: |-
       lameduck 10s
   - name: ready
-  - name: kubernetes
-    parameters: cluster.local in-addr.arpa ip6.arpa
-    configBlock: |-
-      pods insecure
-      fallthrough in-addr.arpa ip6.arpa
-      ttl 30
   - name: prometheus
     parameters: 0.0.0.0:9153
+  # etcd が停止・再起動中でも、直近 1 時間に引かれたレコードは期限切れでも返す
+  # (verify: まず etcd に問い合わせ、失敗したときだけ古いレコードを返す)
   - name: cache
     parameters: 30
-  - name: loop
+    configBlock: |-
+      serve_stale 1h verify
   - name: reload
   - name: loadbalance
   - name: etcd
@@ -49,6 +46,8 @@ servers:
   port: 53
   plugins:
   - name: errors
+  - name: prometheus
+    parameters: 0.0.0.0:9153
   - name: cache
     parameters: 30
   - name: forward
@@ -57,8 +56,12 @@ servers:
   - zone: .
   port: 53
   plugins:
-  - name: forward
-    parameters: . 192.168.1.1
   - name: errors
+  - name: prometheus
+    parameters: 0.0.0.0:9153
   - name: cache
     parameters: 30
+  # forward のループ検出 (forward があるのはこのブロックのみ)
+  - name: loop
+  - name: forward
+    parameters: . 192.168.1.1

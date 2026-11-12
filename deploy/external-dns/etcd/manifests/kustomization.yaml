@@ -1,10 +1,11 @@
-# external-dns のバックエンド用 etcd (公式イメージ, 1 レプリカ, TLS/認証なし)。
+# external-dns のバックエンド用 etcd (公式イメージ, 3 メンバー, TLS/認証なし)。
 # bitnami chart (bitnamilegacy イメージ, 更新停止) から 2026-11 に置き換えた。
 # ArgoCD Application: applications/external-dns/etcd.yaml (このディレクトリを kustomize で参照)
 #
 # データは external-dns が Ingress などから再生成できるため、バックアップは取っていない。
-# 作り直す場合は StatefulSet と PVC を削除して sync し、external-dns を再起動する
+# 作り直す場合は StatefulSet と全メンバーの PVC/PV を削除して sync し、external-dns を再起動する
 # (external-dns は etcd に接続できないと終了し CrashLoopBackOff になる)。
+# 1 メンバーだけ PVC を失った場合の復旧手順は memo/external-dns-backend-etcd_install_memo.md を参照。
 #
 # 更新: statefulset.yaml の image タグを変更する (https://github.com/etcd-io/etcd/releases)。
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -18,3 +19,4 @@ labels:
 resources:
 - service.yaml
 - statefulset.yaml
+- pdb.yaml

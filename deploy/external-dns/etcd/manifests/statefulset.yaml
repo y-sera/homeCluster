@@ -4,7 +4,10 @@ metadata:
   name: etcd
 spec:
   serviceName: etcd-headless
-  replicas: 1
+  # 3 メンバー (1 台停止まで書き込み可能)。メンバー数を変える場合は --initial-cluster も直し、作り直すこと
+  # (稼働中のクラスターに対する replicas の変更だけではメンバーは増減しない)。
+  replicas: 3
+  # 全メンバーが揃わないと quorum が取れず Ready にならないため、同時に起動する
   podManagementPolicy: Parallel
   template:
     spec:
@@ -18,19 +21,34 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      # メンバーは別々のノードに置く (worker1-3。control-plane と qnap-vm は taint で除外される)
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: etcd
+                app.kubernetes.io/instance: external-dns-etcd
       containers:
       - name: etcd
         image: gcr.io/etcd-development/etcd:v3.7.3
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         command:
         - /usr/local/bin/etcd
         args:
-        - --name=etcd-0
+        - --name=$(POD_NAME)
         - --data-dir=/var/lib/etcd/data
         - --listen-client-urls=http://0.0.0.0:2379
-        - --advertise-client-urls=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2379
+        - --advertise-client-urls=http://$(POD_NAME).etcd-headless.external-dns.svc.cluster.local:2379
         - --listen-peer-urls=http://0.0.0.0:2380
-        - --initial-advertise-peer-urls=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2380
-        - --initial-cluster=etcd-0=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2380
+        - --initial-advertise-peer-urls=http://$(POD_NAME).etcd-headless.external-dns.svc.cluster.local:2380
+        # --initial-cluster* はデータディレクトリが空のとき (クラスター作成時) だけ使われる
+        - --initial-cluster=etcd-0=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2380,etcd-1=http://etcd-1.etcd-headless.external-dns.svc.cluster.local:2380,etcd-2=http://etcd-2.etcd-headless.external-dns.svc.cluster.local:2380
         - --initial-cluster-state=new
         - --initial-cluster-token=external-dns-etcd
         # /livez, /readyz, /metrics 用 (probe はここを見る)
