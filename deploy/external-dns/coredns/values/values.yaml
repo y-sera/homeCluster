@@ -28,10 +28,6 @@ servers:
       ttl 30
   - name: prometheus
     parameters: 0.0.0.0:9153
-  - name: forward
-    parameters: k8sapiserver.cluster.orenet.net 192.168.1.161
-  - name: rewrite
-    parameters: name regex .*\.flightctl\.cluster\.orenet\.net flightctl.cluster.orenet.net answer auto
   - name: cache
     parameters: 30
   - name: loop
@@ -43,6 +39,20 @@ servers:
       stubzones
       path /skydns
       endpoint http://etcd:2379
+# Kubernetes API サーバーの接続先 (kubeadm control-plane-endpoint, kubeconfig, cilium k8sServiceHost)。
+# レコードは Synology の DNS (192.168.1.161) が持つ (実体は kube-vip の VIP 192.168.1.2)。
+# cluster.orenet.net ブロックに forward を書いても、プラグインの実行順で etcd が先に NXDOMAIN を返すため、
+# より細かいゾーンの専用ブロックで転送する (CoreDNS は最も細かく一致するゾーンのブロックを使う)。
+- zones:
+  - zone: k8sapiserver.cluster.orenet.net
+    use_tcp: true
+  port: 53
+  plugins:
+  - name: errors
+  - name: cache
+    parameters: 30
+  - name: forward
+    parameters: . 192.168.1.161
 - zones:
   - zone: .
   port: 53
@@ -51,6 +61,4 @@ servers:
     parameters: . 192.168.1.1
   - name: errors
   - name: cache
-    # NOTE: "parameter" (単数) は chart に無視されるため、実際は cache のデフォルト (3600s) で動作している。
-    # 移行時に挙動を変えないためそのまま残している。30s にする場合は "parameters" に直す。
-    parameter: 30
+    parameters: 30
