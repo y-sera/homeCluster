@@ -1,0 +1,19 @@
+# Harbor の Grafana ダッシュボード (kube-prometheus-stack の Grafana: https://grafana.cluster.orenet.net)
+# Grafana の sidecar が全 namespace の grafana_dashboard: "1" ラベル付き ConfigMap を読み込む。
+#   kubectl apply -k deploy/harbor/dashboards --server-side
+#
+# harbor.json の出典: goharbor/harbor v2.15.4 (Harbor と同じバージョン) の
+#   contrib/grafana-dashboard/metrics-example.json (Apache-2.0)。変更なし
+#   (クエリの datasource uid は "prometheus" 固定で、この環境の Prometheus datasource の uid と一致する)
+# メトリクスの収集設定は deploy/harbor/manifests/monitors.yaml。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: harbor
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+- name: grafana-dashboard-harbor
+  files:
+  - harbor.json

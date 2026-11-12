@@ -44,6 +44,13 @@ persistence:
 updateStrategy:
   type: Recreate
 
+# Expose /metrics (port 8001, http-metrics) on core / jobservice / registry and
+# deploy harbor-exporter. The chart's ServiceMonitor is not used because its
+# labels always include release: harbor and adding release: prometheus would
+# duplicate the key; see deploy/harbor/manifests/monitors.yaml.
+metrics:
+  enabled: true
+
 # secretKey (encrypts values stored in the database; must never change) and the
 # initial admin password come from Vault via ESO
 # (deploy/harbor/manifests/core-secrets-external-secret.yaml).

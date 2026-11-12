@@ -1,0 +1,26 @@
+# Harbor のメトリクス収集 (kube-prometheus-stack: namespace prometheus)
+# Prometheus は release: prometheus ラベルの ServiceMonitor / PodMonitor のみを対象にする。
+# chart の ServiceMonitor (metrics.serviceMonitor) は release: harbor が固定で付き、
+# additionalLabels で release: prometheus を足すとキーが重複するため使わず、ここで定義する。
+# メトリクスのエンドポイントの有効化は values の metrics.enabled で行う。
+#   harbor-core       : 8001 http-metrics  (harbor_core_*, go/process)
+#   harbor-jobservice : 8001 http-metrics  (harbor_task_*)
+#   harbor-registry   : 8001 http-metrics  (registry_http_*)
+#   harbor-exporter   : 8001 http-metrics  (harbor_up, harbor_project_*, harbor_artifact_pulled など)
+# job / service ラベルは Service 名 (harbor-core など) になり、公式ダッシュボードの service=~"harbor-.*" に一致する。
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: harbor
+  namespace: harbor
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: harbor
+      release: harbor
+  endpoints:
+  - port: http-metrics
+    path: /metrics
+    honorLabels: true
