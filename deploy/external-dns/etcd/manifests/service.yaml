@@ -1,0 +1,27 @@
+# external-dns (ETCD_URLS=http://etcd:2379) と coredns (endpoint http://etcd:2379) が参照する。
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd
+spec:
+  type: ClusterIP
+  ports:
+  - name: client
+    port: 2379
+    targetPort: client
+---
+# StatefulSet のメンバー名 (etcd-0.etcd-headless) 解決用。
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd-headless
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: client
+    port: 2379
+    targetPort: client
+  - name: peer
+    port: 2380
+    targetPort: peer

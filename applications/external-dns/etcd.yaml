@@ -5,18 +5,10 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  sources:
-  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
-    ref: configs
+  source:
+    repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
     targetRevision: HEAD
-  - repoURL: https://charts.bitnami.com/bitnami
-    path: chart
-    helm:
-      valueFiles:
-      - $configs/deploy/external-dns/etcd/values/values.yaml
-      releaseName: etcd
-    chart: etcd
-    targetRevision: 12.0.18
+    path: deploy/external-dns/etcd/manifests
   destination:
     server: "https://kubernetes.default.svc"
     namespace: external-dns

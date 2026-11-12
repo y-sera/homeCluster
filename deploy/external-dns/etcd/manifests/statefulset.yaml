@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: etcd
+spec:
+  serviceName: etcd-headless
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: etcd
+        image: gcr.io/etcd-development/etcd:v3.6.16
+        command:
+        - /usr/local/bin/etcd
+        args:
+        - --name=etcd-0
+        - --data-dir=/var/lib/etcd/data
+        - --listen-client-urls=http://0.0.0.0:2379
+        - --advertise-client-urls=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2379
+        - --listen-peer-urls=http://0.0.0.0:2380
+        - --initial-advertise-peer-urls=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2380
+        - --initial-cluster=etcd-0=http://etcd-0.etcd-headless.external-dns.svc.cluster.local:2380
+        - --initial-cluster-state=new
+        - --initial-cluster-token=external-dns-etcd
+        # /livez, /readyz, /metrics 用 (probe はここを見る)
+        - --listen-metrics-urls=http://0.0.0.0:2381
+        # 履歴を1時間で compaction し、DB/WAL の肥大化を防ぐ (DNS レコードは履歴不要)
+        - --auto-compaction-mode=periodic
+        - --auto-compaction-retention=1h
+        - --logger=zap
+        - --log-outputs=stderr
+        ports:
+        - name: client
+          containerPort: 2379
+        - name: peer
+          containerPort: 2380
+        - name: metrics
+          containerPort: 2381
+        startupProbe:
+          httpGet:
+            path: /readyz
+            port: metrics
+          periodSeconds: 5
+          failureThreshold: 60
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: metrics
+          periodSeconds: 10
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: metrics
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/etcd
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: longhorn
+      resources:
+        requests:
+          storage: 1Gi
