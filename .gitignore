@@ -1,4 +1,3 @@
 .sops.yaml
 manifests/clusterissuer/*secrets.yaml
-manifests/synology-csi/*secrets.yaml
 manifests/vault/*secrets.yaml
