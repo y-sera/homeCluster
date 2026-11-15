@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rdma-devices
+  namespace: kube-system
+data:
+  # rdmaHcaMax: 1 ノードで rdma/qsfp を同時に使える Pod 数 (共有のため GPU とは独立).
+  # ifNames: QSFP rail0 / rail1 (どちらも 200G, RoCEv2). 未使用の f1 ポートは含めない.
+  config.json: |
+    {
+        "periodicUpdateInterval": 300,
+        "configList": [{
+            "resourceName": "qsfp",
+            "rdmaHcaMax": 16,
+            "selectors": {
+                "vendors": ["15b3"],
+                "ifNames": ["enp1s0f0np0", "enP2p1s0f0np0"]
+            }
+        }]
+    }

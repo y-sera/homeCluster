@@ -1,0 +1,11 @@
+# RDMA shared device plugin (Mellanox/k8s-rdma-shared-dev-plugin v1.5.4)
+# DGX Spark の QSFP (ConnectX-7, RoCE) を拡張リソース rdma/qsfp として公開する.
+# Pod は resources.limits に rdma/qsfp: 1 を書くと, 両レールの HCA の
+# /dev/infiniband/{uverbsN,rdma_cm} が割り当てられる (privileged 不要. memlock のため IPC_LOCK は必要).
+# 出典: deployment/k8s/base (Apache-2.0) を元に, image 固定 / Spark 限定 / 設定を変更.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kube-system
+resources:
+- configmap.yaml
+- daemonset.yaml

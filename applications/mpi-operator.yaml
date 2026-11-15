@@ -1,0 +1,19 @@
+# MPI Operator (MPIJob v2beta1). 2ノード NCCL 検証 (nccl-tests) 用.
+# Kubeflow Trainer v2 導入後に不要なら削除する.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mpi-operator
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kubeflow/mpi-operator.git
+    targetRevision: v0.8.2
+    path: manifests/overlays/standalone
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: mpi-operator
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true
