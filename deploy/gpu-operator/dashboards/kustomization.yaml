@@ -1,0 +1,21 @@
+# DGX Spark (GB10) の Grafana ダッシュボード (kube-prometheus-stack の Grafana: https://grafana.cluster.orenet.net)
+# Grafana の sidecar が全 namespace の grafana_dashboard: "1" ラベル付き ConfigMap を読み込む。
+#   kubectl apply -k deploy/gpu-operator/dashboards --server-side
+#
+# dgx-spark-gpu.json は自作 (datasource uid "prometheus")。
+# GB10 では DCGM exporter の以下の指標が出ないため, NVIDIA 公式ダッシュボード (Grafana 12239) ではなく自作にしている:
+#   - DCGM_FI_DEV_FB_* (ユニファイドメモリのため N/A) -> node-exporter の MemTotal - MemAvailable で代替
+#   - DCGM_FI_PROF_* (DCP プロファイリング指標. exporter ログで "metric not enabled")
+# GPU の割り当て状況は kube-state-metrics (resource="nvidia_com_gpu") から出す。
+# メトリクスの収集設定は deploy/gpu-operator/values/values.yaml (dcgmExporter.serviceMonitor)。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gpu-operator
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+- name: grafana-dashboard-dgx-spark-gpu
+  files:
+  - dgx-spark-gpu.json
