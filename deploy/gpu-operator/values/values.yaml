@@ -1,0 +1,33 @@
+# NVIDIA GPU Operator (chart v26.7.2)
+#
+# 対象: DGX Spark (GB10, arm64, DGX OS). ノード taint nvidia.com/gpu=present:NoSchedule.
+# - driver / toolkit はホスト (DGX OS) のものを使う (containerd に nvidia ランタイム登録済み,
+#   CDI spec は nvidia-cdi-refresh.service が /var/run/cdi/nvidia.yaml に生成)
+# - GPU は device-plugin で nvidia.com/gpu として公開 (共有なし = 1 Pod 占有)
+# - GPU Pod の toleration は apiserver の ExtendedResourceToleration が自動付与する
+
+cdi:
+  enabled: true
+
+driver:
+  enabled: false
+
+toolkit:
+  enabled: false
+
+devicePlugin:
+  enabled: true
+
+gfd:
+  enabled: true
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: prometheus   # kube-prometheus-stack の serviceMonitorSelector
+
+# GB10 は MIG 非対応
+migManager:
+  enabled: false

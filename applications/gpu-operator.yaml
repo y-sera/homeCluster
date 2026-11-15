@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-operator
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://helm.ngc.nvidia.com/nvidia
+    helm:
+      valueFiles:
+      - $configs/deploy/gpu-operator/values/values.yaml
+      releaseName: gpu-operator
+    chart: gpu-operator
+    targetRevision: v26.7.2
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: gpu-operator
+  syncPolicy:
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
