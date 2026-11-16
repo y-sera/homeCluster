@@ -1,0 +1,20 @@
+# istio-system には Kubeflow の NetworkPolicy (同一 namespace と knative-serving からのみ許可) があるため,
+# cilium Ingress (envoy, identity reserved:ingress) から istio-ingressgateway (:8080) への通信を許可する.
+# 通常の NetworkPolicy では reserved:ingress を指定できないため CiliumNetworkPolicy を使う.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-cilium-ingress-to-istio-ingressgateway
+  namespace: istio-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: istio-ingressgateway
+      istio: ingressgateway
+  ingress:
+  - fromEntities:
+    - ingress
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP

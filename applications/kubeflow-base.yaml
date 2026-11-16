@@ -1,4 +1,4 @@
-# Kubeflow 26.10.0: namespace / ClusterRole / kubeflow-gateway / Ingress. kubeflow-istio の後に同期する.
+# Kubeflow 26.10.0: ClusterRole / kubeflow-gateway / Ingress. kubeflow-istio の後に同期する.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -17,3 +17,9 @@ spec:
     syncOptions:
     - ServerSideApply=true
     - SkipDryRunOnMissingResource=true
+  # aggregationRule を持つ ClusterRole の rules は kube-controller-manager が集約して埋める
+  ignoreDifferences:
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+    jsonPointers:
+    - /rules

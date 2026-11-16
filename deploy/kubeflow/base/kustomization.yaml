@@ -2,6 +2,7 @@
 # namespace kubeflow / kubeflow-system (NetworkPolicy 含む) は deploy/kubeflow/istio で作る.
 # - 外部公開: cilium Ingress (TLS 終端, letsencrypt) -> istio-ingressgateway (ClusterIP, :80)
 #   認証は istio-ingressgateway の ext_authz (oauth2-proxy) で行う
+#   istio-system の NetworkPolicy を通すため CiliumNetworkPolicy (fromEntities: ingress) で許可する
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -10,3 +11,4 @@ resources:
 - https://github.com/kubeflow/community-distribution//common/istio/kubeflow-istio-resources/base?ref=26.10.0
 - certificate.yaml
 - ingress.yaml
+- ciliumnetworkpolicy.yaml
