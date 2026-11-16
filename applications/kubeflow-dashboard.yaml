@@ -32,6 +32,8 @@ spec:
     kind: CustomResourceDefinition
     jsonPointers:
     - /spec/conversion/webhook/clientConfig/caBundle
+    # profiles.kubeflow.org の manifest にある preserveUnknownFields: false は API サーバーが保存しない
+    - /spec/preserveUnknownFields
   - group: rbac.authorization.k8s.io
     kind: ClusterRole
     jqPathExpressions:
