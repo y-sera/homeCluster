@@ -10,6 +10,9 @@ chart名: cilium/cilium
 - CNIをインストール後, External-DNS, Cert-manager等を導入する.
 - hubbleを有効化する. Ingressにはcert-manager用のアノテーションも付与しておく.
 - v1.15.7時点において, kube-apiserverの冗長化はkube-vipを使用する. 将来的にciliumが対応したらそちらに移行する.
+- `cni.exclusive=false` とする. Istio の istio-cni (chained plugin) が `/etc/cni/net.d` の cilium の conflist に追記するため
+  (true だと cilium が他の CNI 設定を `*.cilium_bak` にリネームする). この値は agent 起動時に読まれるため,
+  変更時は helm upgrade 後に `kubectl -n kube-system rollout restart ds cilium` が必要.
 
 ### カスタムリソース
 - CiliumBGPPeeringPolicy
