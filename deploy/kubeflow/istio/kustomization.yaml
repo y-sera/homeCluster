@@ -1,0 +1,17 @@
+# Istio 1.31.3 (Kubeflow 26.10.0 の common/istio). istio-cni + native sidecar, oauth2-proxy で外部認証.
+# - istio-cni は Cilium の conflist に chain する (Cilium 側は cni.exclusive=false, socketLB.hostNamespaceOnly=true が前提)
+# - istio-cni-node DaemonSet (kube-system) は NoSchedule を許容するため Spark でも動く
+# - sidecar の request は upstream の既定で cpu 10m / memory 40Mi
+# - istio-ingressgateway の Service は ClusterIP. 外部公開は cilium Ingress (deploy/kubeflow/base/ingress.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//common/istio/istio-crds/base?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//common/istio/istio-namespace/base?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//common/istio/istio-install/overlays/oauth2-proxy?ref=26.10.0
+
+patches:
+# oauth2-proxy がトークン更新時に返す Set-Cookie をブラウザへ返す (headersToDownstreamOnAllow).
+# これがないと Keycloak のトークン (既定 5 分) 更新後の cookie が保存されず, 再ログインを繰り返す.
+- path: patches/istio-configmap-oauth2-proxy.yaml

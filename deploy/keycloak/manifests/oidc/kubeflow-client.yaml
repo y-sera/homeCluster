@@ -1,0 +1,23 @@
+# Kubeflow (oauth2-proxy, deploy/kubeflow/oauth2-proxy) 用の client.
+# Kubeflow のユーザーは email で識別するため, 利用者の email は verified にしておく (未検証だと oauth2-proxy が拒否する).
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakOIDCClient
+metadata:
+  name: kubeflow
+  namespace: keycloak
+spec:
+  keycloakCRName: keycloak
+  realm: home
+  client:
+    enabled: true
+    loginFlows:
+      - STANDARD
+    redirectUris:
+      - "https://kubeflow.cluster.orenet.net/oauth2/callback"
+    webOrigins:
+      - "https://kubeflow.cluster.orenet.net"
+    auth:
+      method: client-secret
+      secretRef:
+        name: kubeflow-oidc
+        key: client-secret

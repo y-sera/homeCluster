@@ -1,0 +1,60 @@
+# oauth2-proxy 7.15.5 (Kubeflow 26.10.0 の common/oauth2-proxy). Dex は使わず Keycloak (realm home) に直接つなぐ.
+# 参考: upstream common/dex/README.md "Connect OAuth2 Proxy directly to Keycloak, without Dex"
+# - Keycloak の client "kubeflow" は deploy/keycloak/manifests/oidc/kubeflow-client.yaml
+# - client-secret / cookie-secret は Vault (eso/kubeflow-oidc) から ExternalSecret で取得
+#   (upstream base の secretGenerator の固定値は使わない)
+# - issuer は oauth2_proxy.cfg / RequestAuthentication dex-jwt / Keycloak の iss の 3 か所で一致させる
+# - m2m-dex-only: クラスタ外から k8s ServiceAccount token でアクセスする機能 (cluster-jwks-proxy) は使わない
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//common/oauth2-proxy/overlays/m2m-dex-only?ref=26.10.0
+- external-secret.yaml
+
+configMapGenerator:
+- name: oauth2-proxy
+  namespace: oauth2-proxy
+  behavior: replace
+  files:
+  - oauth2_proxy.cfg
+- name: oauth2-proxy-parameters
+  namespace: oauth2-proxy
+  behavior: merge
+  literals:
+  - FORCE_HTTPS=true
+  - ALLOW_SELF_SIGNED_ISSUER=false
+
+patches:
+# Istio が Authorization ヘッダーの JWT (oauth2-proxy が付与する Keycloak の ID token) を検証する issuer
+- patch: |-
+    - op: replace
+      path: /spec/jwtRules/0/issuer
+      value: https://keycloak.cluster.orenet.net/realms/home
+  target:
+    group: security.istio.io
+    kind: RequestAuthentication
+    name: dex-jwt
+    namespace: istio-system
+# upstream の固定値 Secret の代わりに ExternalSecret の Secret を参照する
+- patch: |-
+    $patch: delete
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: oauth2-proxy
+      namespace: oauth2-proxy
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+      value: oauth2-proxy-keycloak
+    - op: replace
+      path: /spec/template/spec/containers/0/env/1/valueFrom/secretKeyRef/name
+      value: oauth2-proxy-keycloak
+    - op: replace
+      path: /spec/template/spec/containers/0/env/2/valueFrom/secretKeyRef/name
+      value: oauth2-proxy-keycloak
+  target:
+    kind: Deployment
+    name: oauth2-proxy
+    namespace: oauth2-proxy

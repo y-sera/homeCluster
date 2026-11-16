@@ -1,0 +1,13 @@
+# Kubeflow 26.10.0 の共通基盤 (namespace kubeflow / kubeflow-system, ClusterRole, kubeflow-gateway) と外部公開.
+# - kubeflow-namespace: NetworkPolicy (Ingress のみ) も含む. Cilium が NetworkPolicy を適用する
+# - 外部公開: cilium Ingress (TLS 終端, letsencrypt) -> istio-ingressgateway (ClusterIP, :80)
+#   認証は istio-ingressgateway の ext_authz (oauth2-proxy) で行う
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//common/kubeflow-namespace/base?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//common/kubeflow-roles/base?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//common/istio/kubeflow-istio-resources/base?ref=26.10.0
+- certificate.yaml
+- ingress.yaml

@@ -1,0 +1,18 @@
+# Kubeflow 26.10.0: oauth2-proxy (Keycloak 直結). kubeflow-istio の後に同期する.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubeflow-oauth2-proxy
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    targetRevision: HEAD
+    path: deploy/kubeflow/oauth2-proxy
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: oauth2-proxy
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true
