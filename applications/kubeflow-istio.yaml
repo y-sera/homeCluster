@@ -1,4 +1,4 @@
-# Kubeflow 26.10.0: Istio (CRD / istio-system / istio-cni). kubeflow-oauth2-proxy, kubeflow-base より先に同期する.
+# Kubeflow 26.10.0: Istio (CRD / istio-system / istio-cni) と namespace kubeflow, kubeflow-system. kubeflow-oauth2-proxy, kubeflow-base より先に同期する.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -16,6 +16,7 @@ spec:
   syncPolicy:
     syncOptions:
     - ServerSideApply=true
+    - SkipDryRunOnMissingResource=true
     - RespectIgnoreDifferences=true
   # istiod が実行時に書き換えるフィールド
   ignoreDifferences:

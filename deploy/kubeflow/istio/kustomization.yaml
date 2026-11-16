@@ -3,6 +3,7 @@
 # - istio-cni-node DaemonSet (kube-system) は NoSchedule を許容するため Spark でも動く
 # - sidecar の request は upstream の既定で cpu 10m / memory 40Mi
 # - istio-ingressgateway の Service は ClusterIP. 外部公開は cilium Ingress (deploy/kubeflow/base/ingress.yaml)
+# - namespace kubeflow / kubeflow-system もここで作る (istio-install の Sidecar が kubeflow namespace に作られるため)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -10,6 +11,7 @@ resources:
 - https://github.com/kubeflow/community-distribution//common/istio/istio-crds/base?ref=26.10.0
 - https://github.com/kubeflow/community-distribution//common/istio/istio-namespace/base?ref=26.10.0
 - https://github.com/kubeflow/community-distribution//common/istio/istio-install/overlays/oauth2-proxy?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//common/kubeflow-namespace/base?ref=26.10.0
 
 patches:
 # oauth2-proxy がトークン更新時に返す Set-Cookie をブラウザへ返す (headersToDownstreamOnAllow).
