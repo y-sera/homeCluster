@@ -1,7 +1,21 @@
 # Kubeflow Pipelines 2.18.0 (Kubeflow 26.10.0, multi-user, DB モード: MySQL + SeaweedFS).
 # MySQL / SeaweedFS の PVC (各 20Gi) は既定の StorageClass (longhorn).
+# このディレクトリの Application (app.k8s.io) kubeflow が Dashboard 右下の "build version" になる.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
 - https://github.com/kubeflow/community-distribution//applications/pipeline/overlays?ref=26.10.0
+
+patches:
+# upstream 26.10.0 の overlays/kubeflow-application.yaml は version が "26.03.1" のまま更新されていないため直す
+# (Dashboard の build version 表示のみに使われる). upstream を上げるときは値を合わせる.
+- patch: |-
+    - op: replace
+      path: /spec/descriptor/version
+      value: "26.10.0"
+  target:
+    group: app.k8s.io
+    kind: Application
+    name: kubeflow
+    namespace: kubeflow

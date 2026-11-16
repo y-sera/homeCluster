@@ -13,7 +13,7 @@
 apiVersion: kubeflow.org/v1
 kind: Profile
 metadata:
-  name: kflow-ws-<user>
+  name: kubeflow-ws-<user>
 spec:
   owner:
     kind: User
