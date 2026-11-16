@@ -1,0 +1,114 @@
+# 2ノード NCCL 検証 (DGX Spark x2, 各 1 GPU, QSFP 2 レール RoCE).
+#
+#   kubectl create -f deploy/llm-system/manifests/nccl-tests-mpijob.yaml
+#   kubectl -n llm-systems logs -f -l training.kubeflow.org/job-name=nccl-tests,training.kubeflow.org/job-role=launcher
+#   kubectl -n llm-systems delete mpijob nccl-tests
+#
+# 目安: ホスト間 ib_write_bw は 1 レール 111.9 Gb/s, 2 レール同時 約 196 Gb/s (約 24.5 GB/s).
+# all_reduce_perf の busbw (GB/s) を, 2 ランクの場合はほぼリンク帯域と比較できる.
+#
+# - Pod は通常のネットワーク (hostNetwork なし). RDMA デバイスは rdma/qsfp (shared device plugin) で受け取り,
+#   ホストの netns 共有モード (rdma system: netns shared) により QSFP の GID (RoCEv2, index 3) を使う
+# - NCCL の bootstrap / MPI の制御通信は Pod の eth0 (Cilium)
+# - GPU Pod の toleration は ExtendedResourceToleration が自動付与. launcher は GPU を使わないので明示する
+#   (イメージが arm64 のみのため launcher も Spark に載せる)
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-tests
+  namespace: llm-systems
+spec:
+  slotsPerWorker: 1
+  launcherCreationPolicy: WaitForWorkersReady
+  runPolicy:
+    cleanPodPolicy: Running
+    ttlSecondsAfterFinished: 86400
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          nodeSelector:
+            node-role.kubernetes.io/gpu: ""
+          tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+          containers:
+          - name: launcher
+            image: harbor.cluster.orenet.net/llm-system/nccl-tests:v2.21.1-cuda13.0.3
+            command:
+            - mpirun
+            - -np
+            - "2"
+            - --bind-to
+            - none
+            - --mca
+            - pml
+            - ob1
+            - --mca
+            - btl
+            - tcp,self
+            - --mca
+            - btl_tcp_if_include
+            - eth0
+            - --mca
+            - oob_tcp_if_include
+            - eth0
+            - -x
+            - NCCL_DEBUG=INFO
+            - -x
+            - NCCL_DEBUG_SUBSYS=INIT,NET
+            - -x
+            - NCCL_SOCKET_IFNAME=eth0
+            - -x
+            - NCCL_IB_HCA==rocep1s0f0:1,roceP2p1s0f0:1
+            - -x
+            - NCCL_IB_GID_INDEX=3
+            - all_reduce_perf
+            - -b
+            - "8"
+            - -e
+            - "8G"
+            - -f
+            - "2"
+            - -g
+            - "1"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    training.kubeflow.org/job-name: nccl-tests
+                    training.kubeflow.org/job-role: worker
+                topologyKey: kubernetes.io/hostname
+          containers:
+          - name: worker
+            image: harbor.cluster.orenet.net/llm-system/nccl-tests:v2.21.1-cuda13.0.3
+            securityContext:
+              capabilities:
+                add: ["IPC_LOCK"]
+            resources:
+              requests:
+                cpu: "4"
+                memory: 16Gi
+              limits:
+                memory: 32Gi
+                nvidia.com/gpu: 1
+                rdma/qsfp: 1
+            volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+          volumes:
+          - name: dshm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 8Gi
