@@ -1,0 +1,7 @@
+# Kubeflow Pipelines 2.18.0 (Kubeflow 26.10.0, multi-user, DB モード: MySQL + SeaweedFS).
+# MySQL / SeaweedFS の PVC (各 20Gi) は既定の StorageClass (longhorn).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//applications/pipeline/overlays?ref=26.10.0

@@ -1,0 +1,8 @@
+# Kubeflow Workspaces 2.0.0 (Notebooks v2, Kubeflow 26.10.0). controller / backend / frontend (namespace kubeflow-workspaces).
+# WorkspaceKind は upstream のサンプルではなく自前の定義 (workspacekind-jupyterlab.yaml) を使う.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//applications/workspaces/overlays/istio?ref=26.10.0
+- workspacekind-jupyterlab.yaml

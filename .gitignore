@@ -1,3 +1,4 @@
 .sops.yaml
 manifests/clusterissuer/*secrets.yaml
 manifests/vault/*secrets.yaml
+deploy/kubeflow/profiles/*.yaml

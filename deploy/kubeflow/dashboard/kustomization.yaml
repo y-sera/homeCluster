@@ -1,0 +1,8 @@
+# Kubeflow Dashboard 2.0.1 (Kubeflow 26.10.0). Profile controller, KFAM, PodDefaults webhook を含む.
+# - REGISTRATION_FLOW=false のため, ユーザーの namespace は Profile を手動で作る (deploy/kubeflow/profiles)
+# - "/" の VirtualService もここで作られる (oauth2-proxy の ext_authz は route がないと動かない)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//applications/dashboard/overlays/istio?ref=26.10.0

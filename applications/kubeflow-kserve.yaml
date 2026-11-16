@@ -1,0 +1,45 @@
+# Kubeflow 26.10.0: kserve. kubeflow-istio / kubeflow-oauth2-proxy / kubeflow-base の後に同期する.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubeflow-kserve
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    targetRevision: HEAD
+    path: deploy/kubeflow/kserve
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kserve
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true
+    - SkipDryRunOnMissingResource=true
+    - RespectIgnoreDifferences=true
+    # webhook の証明書 (cert-manager) が発行されるまで ClusterServingRuntime などの適用が失敗するため再試行する
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+  # cert-manager (cainjector) が埋める caBundle と, 集約型 ClusterRole の rules は差分にしない
+  ignoreDifferences:
+  - group: admissionregistration.k8s.io
+    kind: ValidatingWebhookConfiguration
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
+  - group: admissionregistration.k8s.io
+    kind: MutatingWebhookConfiguration
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
+  - group: apiextensions.k8s.io
+    kind: CustomResourceDefinition
+    jsonPointers:
+    - /spec/conversion/webhook/clientConfig/caBundle
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+    jqPathExpressions:
+    - select(.aggregationRule != null) | .rules

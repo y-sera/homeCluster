@@ -1,0 +1,26 @@
+# Kubeflow の Profile (ユーザーごとの namespace) のひな形.
+# owner の email を含むため, 本物はコミットしない (.gitignore: deploy/kubeflow/profiles/*.yaml).
+#
+#   cp deploy/kubeflow/profiles/profile.yaml.sample deploy/kubeflow/profiles/<namespace>.yaml
+#   (metadata.name と spec.owner.name を書き換える)
+#   kubectl apply -f deploy/kubeflow/profiles/<namespace>.yaml
+#
+# - spec.owner.name: Keycloak (realm home) のユーザーの email. Email verified を ON にしておく
+#   (oauth2-proxy -> Istio が kubeflow-userid ヘッダーに入れる値と一致させる)
+# - Profile controller が namespace, RoleBinding (kubeflow-admin), AuthorizationPolicy,
+#   ServiceAccount (default-editor / default-viewer), KFP 用の設定を作る
+# - 現在の値の確認: kubectl get profile <namespace> -o yaml
+apiVersion: kubeflow.org/v1
+kind: Profile
+metadata:
+  name: kflow-ws-<user>
+spec:
+  owner:
+    kind: User
+    name: <owner-email>
+  # namespace ごとの上限 (任意)
+  # resourceQuotaSpec:
+  #   hard:
+  #     requests.cpu: "8"
+  #     requests.memory: 32Gi
+  #     requests.nvidia.com/gpu: "2"

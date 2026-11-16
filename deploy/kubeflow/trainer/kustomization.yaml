@@ -1,0 +1,8 @@
+# Kubeflow Trainer 2.4.0 + JobSet 0.13.0 (Kubeflow 26.10.0, namespace kubeflow-system).
+# 標準の ClusterTrainingRuntime と Kubeflow 用の ClusterRole を含む.
+# NCCL を使う TrainJob (DGX Spark 2 台) は sidecar を注入しない (sidecar.istio.io/inject: "false")
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//applications/trainer/overlays?ref=26.10.0

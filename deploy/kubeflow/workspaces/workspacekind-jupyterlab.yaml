@@ -1,0 +1,196 @@
+# JupyterLab の WorkspaceKind. upstream の samples/jupyterlab_v1beta1_workspacekind.yaml (26.10.0) を元に,
+# イメージを最新版のみ, PodConfig を worker (CPU) と DGX Spark (GPU) 向けにしたもの.
+#
+# activityRules (Notebooks v1 の culling に相当. 上から順に評価し, 最初に一致したルールを使う):
+# - GPU の PodConfig (spawner label gpu=1): 1 時間操作がなければ一時停止 (GPU を解放する)
+# - それ以外: 2 時間操作がなければ一時停止
+# 一時停止中も home の PVC は残る. 再開は画面から行う.
+# 操作の有無は activityProbe (Pod 内で Jupyter の /api/status を取得) で判定する.
+apiVersion: kubeflow.org/v1beta1
+kind: WorkspaceKind
+metadata:
+  name: jupyterlab
+spec:
+  spawner:
+    displayName: "JupyterLab Notebook"
+    description: "A Workspace which runs JupyterLab in a Pod"
+    hidden: false
+    deprecated: false
+    icon:
+      url: "https://jupyter.org/assets/favicons/apple-touch-icon-152x152.png"
+    logo:
+      url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Jupyter_logo.svg"
+
+  activityRules:
+  - config:
+      secondsSinceActive: 3600
+      minRunningSeconds: 300
+    match:
+    - matchPodConfig:
+        selector:
+          matchLabels:
+            gpu: "1"
+    effect:
+      pauseWorkspace: true
+  - config:
+      secondsSinceActive: 7200
+      minRunningSeconds: 300
+    match: []
+    effect:
+      pauseWorkspace: true
+
+  podTemplate:
+    serviceAccount:
+      clusterRoles: []
+    activityProbe:
+      minProbeIntervalSeconds: 300
+      # 一時停止までの時間 (1-2 時間) に対して十分短くする
+      probeIntervalSeconds: 600
+      podExec:
+        timeoutSeconds: 60
+        script: |-
+          #!/usr/bin/env python3
+          import os, shutil, urllib.request
+          prefix = os.environ.get("NB_PREFIX", "").rstrip("/")
+          url = f"http://127.0.0.1:8888{prefix}/api/status"
+          with urllib.request.urlopen(url, timeout=10) as resp, open(os.environ["OUTPUT_JSON_PATH"], "wb") as out:
+              shutil.copyfileobj(resp, out)
+    volumeMountPaths:
+      home: "/home/jovyan"
+    ports:
+    - id: "jupyterlab"
+      defaultDisplayName: "JupyterLab"
+      protocol: "HTTP"
+      httpProxy:
+        removePathPrefix: false
+        requestHeaders: {}
+    podSpec:
+      securityContext:
+        fsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
+      extraVolumes:
+      - name: "dshm"
+        emptyDir:
+          medium: "Memory"
+      mainContainer:
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        readinessProbe:
+          periodSeconds: 5
+          tcpSocket:
+            port: "jupyterlab"
+        extraEnv:
+        - name: "NB_PREFIX"
+          value: |-
+            {{ httpPathPrefix "jupyterlab" }}
+        extraVolumeMounts:
+        - name: "dshm"
+          mountPath: "/dev/shm"
+
+    options:
+      imageConfig:
+        spawner:
+          default: "jupyter-scipy:v1.11.1"
+        values:
+        - id: "jupyter-scipy:v1.11.1"
+          spawner:
+            displayName: "jupyter-scipy:v1.11.1"
+            description: "JupyterLab, with SciPy Packages"
+            labels:
+            - key: "python_version"
+              value: "3.12.13"
+          spec:
+            image: "ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-scipy:v1.11.1"
+            imagePullPolicy: "IfNotPresent"
+            ports:
+            - id: "jupyterlab"
+              port: 8888
+        # amd64 / arm64 両対応. CUDA 13.0 (DGX Spark の driver 580 に対応)
+        - id: "jupyter-pytorch-cuda-full:v1.11.1"
+          spawner:
+            displayName: "jupyter-pytorch-cuda-full:v1.11.1"
+            description: "JupyterLab, with PyTorch (CUDA), and Common Python Packages"
+            labels:
+            - key: "python_version"
+              value: "3.12.13"
+            - key: "pytorch_version"
+              value: "2.12.0"
+            - key: "cuda_version"
+              value: "13.0"
+          spec:
+            image: "ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-pytorch-cuda-full:v1.11.1"
+            imagePullPolicy: "IfNotPresent"
+            ports:
+            - id: "jupyterlab"
+              port: 8888
+
+      podConfig:
+        spawner:
+          default: "small_cpu"
+        values:
+        - id: "small_cpu"
+          spawner:
+            displayName: "Small CPU"
+            description: "worker 上で 1 CPU, 2 GiB RAM"
+            labels:
+            - key: "cpu"
+              value: "1000m"
+            - key: "memory"
+              value: "2Gi"
+          spec:
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2Gi
+              limits:
+                memory: 4Gi
+        - id: "medium_cpu"
+          spawner:
+            displayName: "Medium CPU"
+            description: "worker 上で 2 CPU, 8 GiB RAM"
+            labels:
+            - key: "cpu"
+              value: "2000m"
+            - key: "memory"
+              value: "8Gi"
+          spec:
+            resources:
+              requests:
+                cpu: 2000m
+                memory: 8Gi
+              limits:
+                memory: 12Gi
+        # DGX Spark (GB10) 1 台を占有. メモリは CPU/GPU 共有 (128 GB) のため多めに確保する.
+        # toleration は ExtendedResourceToleration が自動付与するが, 明示しておく.
+        - id: "spark_gpu"
+          spawner:
+            displayName: "DGX Spark GPU"
+            description: "DGX Spark 上で GB10 GPU 1, 8 CPU, 64 GiB RAM (要: CUDA イメージ)"
+            labels:
+            - key: "cpu"
+              value: "8000m"
+            - key: "memory"
+              value: "64Gi"
+            - key: "gpu"
+              value: "1"
+          spec:
+            nodeSelector:
+              node-role.kubernetes.io/gpu: ""
+            tolerations:
+            - key: "nvidia.com/gpu"
+              operator: "Exists"
+              effect: "NoSchedule"
+            resources:
+              requests:
+                cpu: 8000m
+                memory: 64Gi
+              limits:
+                memory: 96Gi
+                nvidia.com/gpu: 1

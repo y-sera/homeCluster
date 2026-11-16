@@ -1,0 +1,12 @@
+# KServe 0.21.0 + KServe UI 1.1.0 (Kubeflow 26.10.0).
+# - Knative は入れないため既定の deploymentMode を Standard (旧 RawDeployment) にする
+# - InferenceService の外部公開用 Ingress は作らない. クラスタ内 (Service) から利用する
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- https://github.com/kubeflow/community-distribution//applications/kserve/kserve?ref=26.10.0
+- https://github.com/kubeflow/community-distribution//applications/kserve/kserve-ui?ref=26.10.0
+
+patches:
+- path: patches/inferenceservice-config.yaml
