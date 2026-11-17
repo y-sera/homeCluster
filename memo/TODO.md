@@ -39,5 +39,12 @@ Kubeflow は機械学習を継続的に行う仕組み (学習 → パイプラ�
       `adminPassword` 未設定のため描画のたびにランダムなパスワードが作られ, Secret / Deployment が常に OutOfSync になっている.
       このまま同期すると admin パスワードが変わるので注意
 
+### prometheus のデータの永続化
+現状は Prometheus / Alertmanager / Grafana のどれも PVC がなく (emptyDir), Pod が作り直されるとデータが消える.
+- [ ] Prometheus: `prometheus.prometheusSpec.storageSpec` で PVC を使う (現在 retention 10d). StorageClass と容量を決める
+- [ ] Alertmanager: `alertmanager.alertmanagerSpec.storage` で PVC を使う (silence などの状態が消えないように)
+- [ ] Grafana: `grafana.persistence` で PVC を使う (UI で作ったダッシュボードや設定が消えないように).
+      ダッシュボードを ConfigMap (sidecar) で管理する方針なら不要
+
 ### ArgoCD
 - [ ] 3.6 へ上げるとき: `argocd-cmd-params-cm` の `server.repo.server.strict.tls` (3.5 で非推奨) を見直す
