@@ -6,6 +6,12 @@
 # - それ以外: 2 時間操作がなければ一時停止
 # 一時停止中も home の PVC は残る. 再開は画面から行う.
 # 操作の有無は activityProbe (Pod 内で Jupyter の /api/status を取得) で判定する.
+#
+# Kubeflow Pipelines の利用: Workspace 内で kfp.Client() を引数なしで使える.
+# - Workspace ごとの ServiceAccount (ws-<name>-xxxxx) に kubeflow-edit を付与 (namespace 内の RoleBinding.
+#   Notebooks v1 で Notebook が使っていた default-editor と同じ権限)
+# - KFP API 用の ServiceAccount token (audience pipelines.kubeflow.org) を projected volume で渡し,
+#   KF_PIPELINES_SA_TOKEN_PATH / KF_PIPELINES_ENDPOINT を設定する (v1 の PodDefault access-ml-pipeline 相当)
 apiVersion: kubeflow.org/v1beta1
 kind: WorkspaceKind
 metadata:
@@ -41,7 +47,8 @@ spec:
 
   podTemplate:
     serviceAccount:
-      clusterRoles: []
+      clusterRoles:
+      - name: kubeflow-edit
     activityProbe:
       minProbeIntervalSeconds: 300
       # 一時停止までの時間 (1-2 時間) に対して十分短くする
@@ -73,6 +80,13 @@ spec:
       - name: "dshm"
         emptyDir:
           medium: "Memory"
+      - name: "kfp-token"
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: pipelines.kubeflow.org
+              expirationSeconds: 7200
       mainContainer:
         securityContext:
           allowPrivilegeEscalation: false
@@ -90,9 +104,16 @@ spec:
         - name: "NB_PREFIX"
           value: |-
             {{ httpPathPrefix "jupyterlab" }}
+        - name: "KF_PIPELINES_SA_TOKEN_PATH"
+          value: "/var/run/secrets/kubeflow/pipelines/token"
+        - name: "KF_PIPELINES_ENDPOINT"
+          value: "http://ml-pipeline.kubeflow:8888"
         extraVolumeMounts:
         - name: "dshm"
           mountPath: "/dev/shm"
+        - name: "kfp-token"
+          mountPath: "/var/run/secrets/kubeflow/pipelines"
+          readOnly: true
 
     options:
       imageConfig:

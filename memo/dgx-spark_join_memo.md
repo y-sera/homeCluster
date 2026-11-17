@@ -87,6 +87,39 @@ systemctl list-units --type=service --state=running | grep -iE 'ollama|vllm|trit
 nvidia-smi                          # GPU を使っているプロセスが無いこと
 ```
 
+### iSCSI マルチパス (qnap-iscsi 用)
+GPU Pod の PVC は qnap-iscsi (trident) を使う (Longhorn は Spark で動かない).
+trident は iSCSI ボリュームのマルチパスデバイス (`/dev/mapper/mpathX`) を前提とするため,
+QNAP の LUN だけをマルチパスの対象にする (worker と同じ設定. 詳細は `qnap-trident_install_memo.md`).
+未設定だと Pod が `multipath device not found when it is expected` で Init のまま止まる.
+
+DGX OS には open-iscsi / multipath-tools が入っており, iscsid / multipathd も動いている.
+```
+systemctl is-active iscsid multipathd   # active, active
+cp /etc/multipath.conf /etc/multipath.conf.bak.$(date +%Y%m%d)
+cat > /etc/multipath.conf <<'EOF'
+defaults {
+    user_friendly_names yes
+    find_multipaths no
+}
+blacklist {
+    device {
+        vendor ".*"
+        product ".*"
+    }
+}
+blacklist_exceptions {
+    device {
+        vendor "QNAP"
+        product "iSCSI Storage"
+    }
+}
+EOF
+multipath -d -v2                 # QNAP 以外 (NVMe など) が出ないこと (iSCSI 未接続なら何も出ない)
+systemctl reload multipathd
+```
+qnap-iscsi の PVC を使う Pod が載った後, `multipath -ll` で `QNAP,iSCSI Storage` の mpath が表示されること.
+
 ## 2. containerd (CRI 有効化)
 
 Docker 用の既定設定 (`disabled_plugins = ["cri"]`) を, k8s 用の既定設定で置き換える.
