@@ -11,7 +11,9 @@
 # - Workspace ごとの ServiceAccount (ws-<name>-xxxxx) に kubeflow-edit を付与 (namespace 内の RoleBinding.
 #   Notebooks v1 で Notebook が使っていた default-editor と同じ権限)
 # - KFP API 用の ServiceAccount token (audience pipelines.kubeflow.org) を projected volume で渡し,
-#   KF_PIPELINES_SA_TOKEN_PATH / KF_PIPELINES_ENDPOINT を設定する (v1 の PodDefault access-ml-pipeline 相当)
+#   KF_PIPELINES_SA_TOKEN_PATH を設定する (v1 の PodDefault access-ml-pipeline 相当)
+#   KF_PIPELINES_ENDPOINT は設定しない. 設定すると kfp SDK が token を付けずに接続し 401 になる
+#   (未設定時は Pod 内から ml-pipeline.kubeflow.svc.cluster.local:8888 に token 付きで接続する)
 apiVersion: kubeflow.org/v1beta1
 kind: WorkspaceKind
 metadata:
@@ -106,8 +108,6 @@ spec:
             {{ httpPathPrefix "jupyterlab" }}
         - name: "KF_PIPELINES_SA_TOKEN_PATH"
           value: "/var/run/secrets/kubeflow/pipelines/token"
-        - name: "KF_PIPELINES_ENDPOINT"
-          value: "http://ml-pipeline.kubeflow:8888"
         extraVolumeMounts:
         - name: "dshm"
           mountPath: "/dev/shm"
