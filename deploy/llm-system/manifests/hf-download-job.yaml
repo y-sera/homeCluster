@@ -1,0 +1,108 @@
+# Hugging Face のモデルを PVC llm-models (qnap-smb) にダウンロードする Job.
+#
+# 格納レイアウトは Spark からの移行 (migrate_models.sh) と同じ:
+#   model   -> /models/<org>/<name>/
+#   dataset -> /models/datasets/<org>/<name>/
+#   各ディレクトリに .hf-revision (repo, kind, revision, source) を書く.
+#
+# 使い方: env の REPO_ID などを書き換えて
+#   kubectl create -f deploy/llm-system/manifests/hf-download-job.yaml
+# (generateName のため apply ではなく create. 複数モデルを並行して流せる)
+#   kubectl -n llm-systems logs -f job/<作成された名前>
+#
+# 途中で失敗しても再実行すれば local-dir のメタデータから再開する (取得済みファイルはスキップ).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: hf-download-
+  namespace: llm-systems
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: hf-cli
+          image: harbor.cluster.orenet.net/llm-system/hf-cli:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # ---- ここを書き換える ----
+            - name: REPO_ID
+              value: "Qwen/Qwen3-0.6B"
+            - name: REPO_TYPE          # model | dataset
+              value: "model"
+            - name: REVISION           # ブランチ / タグ / コミット. 実際に取得したコミット sha を .hf-revision に記録する
+              value: "main"
+            - name: INCLUDE            # 空白区切りの glob (例: "*.safetensors *.json"). 空なら全ファイル
+              value: ""
+            - name: EXCLUDE            # 空白区切りの glob (例: "original/* *.pth")
+              value: ""
+            # --------------------------
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            # キャッシュは SMB ではなく Pod ローカルに置く (local-dir のメタデータ置き場と重ならないように)
+            - name: HF_HOME
+              value: /hf-home
+            # xet のチャンクキャッシュは再利用しないので無効化 (ノードのエフェメラルストレージ圧迫防止)
+            - name: HF_XET_CHUNK_CACHE_SIZE_BYTES
+              value: "0"
+            - name: HF_HUB_DISABLE_PROGRESS_BARS
+              value: "1"
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              case "$REPO_TYPE" in
+                model)   DEST="/models/$REPO_ID" ;;
+                dataset) DEST="/models/datasets/$REPO_ID" ;;
+                *) echo "unsupported REPO_TYPE: $REPO_TYPE" >&2; exit 1 ;;
+              esac
+
+              # 指定 revision をコミット sha に解決し, ファイル一覧を得る
+              hf "${REPO_TYPE}s" info "$REPO_ID" --revision "$REVISION" --expand sha,siblings --json > /hf-home/info.json
+              SHA=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' /hf-home/info.json)
+              echo "repo=$REPO_ID type=$REPO_TYPE revision=$REVISION -> $SHA"
+              echo "dest=$DEST"
+
+              # SMB 上で hf の並列スレッドが同時に mkdir すると EACCES になるため,
+              # サブディレクトリ (本体とメタデータ置き場の両方) を事前に作成しておく
+              python3 - "$DEST" /hf-home/info.json <<'EOF'
+              import json, os, sys
+              dest, info = sys.argv[1], json.load(open(sys.argv[2]))
+              dirs = {os.path.dirname(s["rfilename"]) for s in info.get("siblings") or []}
+              for d in dirs | {""}:
+                  os.makedirs(os.path.join(dest, d), exist_ok=True)
+                  os.makedirs(os.path.join(dest, ".cache/huggingface/download", d), exist_ok=True)
+              EOF
+
+              set -- "$REPO_ID" --repo-type "$REPO_TYPE" --revision "$SHA" --local-dir "$DEST"
+              for p in $INCLUDE; do set -- "$@" --include "$p"; done
+              for p in $EXCLUDE; do set -- "$@" --exclude "$p"; done
+              hf download "$@"
+
+              printf 'repo: %s\nkind: %s\nrevision: %s\nsource: huggingface.co (job %s)\n' \
+                "$REPO_ID" "$REPO_TYPE" "$SHA" "$HOSTNAME" > "$DEST/.hf-revision"
+              du -sh "$DEST"
+              echo done
+          volumeMounts:
+            - name: llm-models
+              mountPath: /models
+            - name: hf-home
+              mountPath: /hf-home
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: llm-models
+          persistentVolumeClaim:
+            claimName: llm-models
+        - name: hf-home
+          emptyDir:
+            sizeLimit: 10Gi
