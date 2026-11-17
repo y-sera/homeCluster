@@ -1384,7 +1384,9 @@ grafana:
   # Use an existing secret for the admin user.
   admin:
     ## Name of the secret. Can be templated.
-    existingSecret: ""
+    # 本環境: Vault の固定値を ESO で渡す (deploy/prometheus/manifests/grafana-admin-external-secret.yaml).
+    # 未指定だと ArgoCD での描画のたびにランダムなパスワードになり OutOfSync になる
+    existingSecret: "grafana-admin"
     userKey: admin-user
     passwordKey: admin-password
 

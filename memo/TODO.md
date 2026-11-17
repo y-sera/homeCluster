@@ -35,7 +35,7 @@ Kubeflow は機械学習を継続的に行う仕組み (学習 → パイプラ�
 
 ## その他
 ### prometheus の OutOfSync
-- [ ] Grafana の admin パスワードを `admin.existingSecret` (Vault + ExternalSecret) に移す.
+- [x] Grafana の admin パスワードを `admin.existingSecret` (Vault + ExternalSecret) に移す.
       `adminPassword` 未設定のため描画のたびにランダムなパスワードが作られ, Secret / Deployment が常に OutOfSync になっている.
       このまま同期すると admin パスワードが変わるので注意
 
