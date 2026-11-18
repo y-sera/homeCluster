@@ -7,19 +7,23 @@ science-systems に置いた arXiv データセット (Hugging Face `secemp9/arx
 LLM のエージェントが MCP 経由で論文を検索・抽出・表示・解説し, 関連論文を辿れる研究用の検索システムを作る.
 
 - データの正本は Apache Iceberg (S3 互換ストレージ RustFS 上) に置き, カタログは Apache Polaris を使う
-- エージェントからの検索・閲覧は, 検索インデックス (OpenSearch), 引用グラフ (PostgreSQL), 本文の節チャンクで高速に応答する
+- 本文の加工結果 (正規化した節, チャンク, 埋め込み) も Iceberg の派生テーブルに置き, 検索インデックスはそこから作り直せるようにする
+- エージェントからの検索・閲覧は, 検索インデックス (OpenSearch), 引用グラフ (PostgreSQL) で高速に応答する
+- OpenSearch は専用の検索ノード (Intel NUC) に置き, データはノードのローカル NVMe 上の PV に置く
 - arXiv の S3 バケット (本文) と OAI-PMH (メタデータ), OpenAlex (引用) から定期的に最新化する
 - MCP サーバーを自宅ネットワーク内に公開し, ローカル LLM と Claude / OpenAI のどちらからでも使えるようにする
 
 ## 2. ユースケース
 | エージェントの動作 | 提供する機能 |
 |---|---|
-| 質問 (日本語可) から論文を探す | ハイブリッド検索 (BM25 + ベクトル, 多言語埋め込み), カテゴリ・期間・著者での絞り込み |
-| 該当部分を抜き出す | 本文の節チャンクの検索 |
+| 質問 (日本語可) から論文を探す | ハイブリッド検索 (BM25 + ベクトル, 多言語埋め込み, RRF で統合), カテゴリ・期間・著者での絞り込み |
+| 該当部分を抜き出す | 本文チャンクの検索 (BM25), 節の種類 (手法・実験など) での絞り込み |
 | 表示する | 書誌情報, arXiv の abs / PDF へのリンク (arXiv の規約上リンクは必須), 必要に応じて PDF |
 | 解説する | LLM が目次と必要な節だけを読む (解説自体は LLM 側) |
 | 関連論文を辿る | 参照文献 / 被引用 (自前抽出 + OpenAlex), 内容の近い論文 (埋め込みの近傍), 同じ著者・カテゴリ |
 | 傾向を分析する | Trino への読み取り専用 SQL |
+
+- 検索の対象は各論文の最新版とする. 過去の版は閲覧 (版を指定した `read_section`) と SQL で扱う
 
 ## 3. 現状のデータ (2026-11-18 時点)
 - PVC `science-systems/arxiv-datasets` (qnap-smb, RWX, 17Ti) に HF のリポジトリ構成のまま約 15TB
@@ -38,6 +42,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - ZSTD 圧縮 (arrow 25). 中身の列は large_binary で, 行グループは 200 行程度
 - 各シャードは `paper_id` の辞書順 (新形式 ID が先, `hep-th/...` などの旧形式が後) に並んでいる
 - Iceberg のフィールド ID は持たない (登録時は名前で対応付ける)
+- paper_text は論文ごとに 1 行で版の列を持たない (1 つの版の本文のみ). 過去の版の本文が必要な場合は source から組み立てる
 
 ## 4. 構成
 ```
@@ -46,15 +51,18 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
  LiteLLM ─── Open WebUI (MCP ホスト, 自宅 NW 内)
                  │ MCP (Streamable HTTP)
                  ▼
- arxiv-mcp ── arxiv-api (FastAPI) ─┬─ OpenSearch : 論文 / 節チャンクのハイブリッド検索
+ arxiv-mcp ── arxiv-api (FastAPI) ─┬─ OpenSearch [search1] : 論文 (hybrid) / 本文チャンク (BM25)
+                                   ├─ 質問のベクトル化 [search1, CPU]
                                    ├─ PostgreSQL : 引用グラフ, 書誌キャッシュ
-                                   ├─ 埋め込み推論 (KServe, CPU) : 質問のベクトル化
                                    └─ Trino ── Polaris (+PostgreSQL) ── Iceberg on RustFS (qnap-vm)
- 取り込み (CronJob / KFP)
-   日次  : OAI-PMH → metadata/versions を MERGE → 新規論文の埋め込み・索引
-   月次  : arXiv S3 (pdf/src) → 中身 → latex → 本文の組み立て → 節チャンク → 引用抽出 → 索引
+                                                                         ├─ 正本 : metadata / versions / files / paper_text / latex / source / pdf / ps
+                                                                         └─ 派生 : paper_sections / paper_chunks / paper_embeddings / citations
+ 取り込み・加工 (CronJob / KFP)
+   日次  : OAI-PMH → metadata/versions を MERGE → 新規論文の埋め込み → 論文索引を更新
+   月次  : arXiv S3 (pdf/src) → 中身 → latex → 本文の組み立て → 正規化・節分割 → チャンク → 引用抽出 → 索引を更新
    四半期: OpenAlex スナップショット → 引用の補完
-   初回  : HF parquet → Iceberg へ移行, 全件の埋め込み (Spark GPU, KFP)
+   初回  : HF parquet → Iceberg へ移行, 全件の加工, 論文の埋め込み (DGX Spark の GPU, KFP), 索引作成
+ OpenSearch のスナップショット → RustFS (バックアップ)
 ```
 
 ### 構成要素
@@ -63,17 +71,24 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 | RustFS | qnap-vm (taint 許容, nodeSelector) | 単ノード単ディスク (standalone). データは qnap-iscsi の PVC (18Ti, シン). 冗長化は QNAP の RAID |
 | Polaris + PostgreSQL (CNPG) | worker | Iceberg REST カタログ. catalog `arxiv`, `stsUnavailable: true`, `pathStyleAccess: true` |
 | Trino | worker | Iceberg コネクタ (REST カタログ). 分析 SQL と API の裏側 |
-| OpenSearch | worker | 論文の索引 (314 万件, 埋め込み付き), 節チャンクの索引 (BM25) |
+| OpenSearch | search1 (NUC) | 単一ノード. データはローカル NVMe の PV. 論文の索引 (314 万件, 埋め込み付き), 本文チャンクの索引 (BM25). スナップショットを RustFS に取る |
 | PostgreSQL (CNPG) | worker | 引用グラフ (参照 / 被引用), 書誌キャッシュ |
-| 埋め込み | 一括: Spark GPU (KFP) / 質問: KServe (CPU) | 多言語モデル (例: Qwen3-Embedding-0.6B, bge-m3) |
-| arxiv-api / arxiv-mcp | science-systems | FastAPI と MCP サーバー (公式 Python SDK, Streamable HTTP) |
+| 埋め込み | 一括: DGX Spark の GPU (KFP) / 質問: search1 (CPU, KServe) | Qwen3-Embedding-0.6B (初期. 5.5 参照) |
+| arxiv-api / arxiv-mcp | science-systems (worker) | FastAPI と MCP サーバー (公式 Python SDK, Streamable HTTP) |
 | Open WebUI + LiteLLM | worker | MCP ホストと, ローカル / クラウド LLM の統合 API |
+| 検索ノード search1 | Intel NUC 11PAHi5 (i5-1135G7, 64GB, NVMe 500GB, SATA SSD を追加予定) | OpenSearch, 質問のベクトル化, エージェントのサンドボックス (agent-sandbox, 別設計) を同居. 5.10 参照 |
 
 ### 選定理由
 - **Iceberg**: 日次更新の MERGE (upsert), スナップショットによる再現性 (ML 学習の入力として固定できる), Trino / DuckDB / PyIceberg / Spark から共通に使える. 既存 parquet を `add_files` で書き換えずに登録できる
 - **Polaris (Gravitino ではなく)**: 用途が Iceberg のみ, Helm chart と PostgreSQL 永続化, RustFS 用の公式ガイド, `stsUnavailable` で STS なしの S3 互換ストレージに対応, Keycloak 連携のガイドあり.
   Gravitino は Hive / JDBC / fileset などの横断管理が必要になった時に Polaris の上に追加できる
-- **OpenSearch (Elasticsearch ではなく)**: Apache 2.0 でライセンス階層がない. BM25 / kNN / hybrid クエリ / 絞り込み / 集計を一つで扱える
+- **OpenSearch (Elasticsearch ではなく)**: Apache 2.0 でライセンス階層がない. BM25 / kNN / hybrid クエリ (RRF) / 絞り込み / 集計を一つで扱える
+- **加工結果を Iceberg に置く**: 埋め込みモデルやチャンクの作り方を変えても, OpenSearch を Iceberg から作り直せる. OpenSearch は派生物とし, 単一ノードで運用する
+- **OpenSearch を NUC に置く**: 他の候補は次の理由で不採用
+  - QNAP (TS-473A) 上の VM: CPU (Ryzen V1500B) が弱く, メモリ 32GB を NAS と分け合う. ディスクが HDD のみで, ランダム読み込みが遅い
+  - worker + Longhorn: Longhorn の空きが約 110G (レプリカ 3) で本文の索引が入らない. worker の CPU の空きが 2 コア程度
+  - worker + qnap-iscsi: 本文の検索が HDD を iSCSI 越しに読むことになり遅い
+  - DGX Spark: 容量と性能は十分だが, メモリが GPU と共用で LLM / 学習と取り合う
 - **Open WebUI + LiteLLM**: Open WebUI は Streamable HTTP の MCP に標準対応した Web チャット. LiteLLM でローカル LLM と Claude / OpenAI を一つの OpenAI 互換 API にまとめる.
   MCP の呼び出しは自宅内の Open WebUI から行うため, MCP サーバーは外部に公開しない
 - **RustFS の S3 Tables (内蔵 Iceberg カタログ)** は Trino からの書き込みを保証しておらず Iceberg v3 にも未対応のため不採用
@@ -88,13 +103,14 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 ### 5.2 最新化 (必須)
 | 対象 | 取得元 | 頻度 | 処理 |
 |---|---|---|---|
-| メタデータ・版 | OAI-PMH arXivRaw (export.arxiv.org) | 日次 | 前回の datestamp 以降を取得し MERGE. 状態テーブルに記録 |
-| PDF・ソース | `s3://arxiv/{pdf,src}/` (requester-pays, us-east-1) | 月次 | manifest を処理済みチャンクと比較 (md5sum, timestamp) → 新規・変更チャンクを取得・展開 → pdf / source / files に追記 → latex を拡張子で抽出 → 本文の組み立て → 節チャンク → 引用抽出 → 版フラグ再計算 |
+| メタデータ・版 | OAI-PMH arXivRaw (export.arxiv.org) | 日次 | 前回の datestamp 以降を取得し MERGE. 状態テーブルに記録. 新規・更新論文の埋め込みを作り論文索引を更新 |
+| PDF・ソース | `s3://arxiv/{pdf,src}/` (requester-pays, us-east-1) | 月次 | manifest を処理済みチャンクと比較 (md5sum, timestamp) → 新規・変更チャンクを取得・展開 → pdf / source / files に追記 → latex を拡張子で抽出 → 本文の組み立て → 正規化・節分割 (5.4) → チャンク → 引用抽出 → 版フラグ再計算 → 本文索引を更新 |
 | 引用 | OpenAlex スナップショット (`s3://openalex`, 認証不要, 無料) | 四半期 | 必要な列だけ抽出し, DOI (arXiv の `10.48550/arXiv.*` を含む) で対応付け |
 
 - 初回の追い付き: yymm が 2608 以降のチャンクと, manifest の timestamp が 2026-09-05 より新しいチャンク. 重複は sha256 と (paper_id, version, path) で除去
 - 費用: requester-pays の転送料 約 $0.09/GB. 月 約 100GB で $10/月程度, 初回の追い付き 約 $30. AWS の認証情報は Vault + ESO
 - arXiv の規約: 全件クロールはせず S3 で取得する. 全文を使うサービスでは arXiv へのリンクを表示する
+- 新しい版が出た論文は, 本文索引の該当 paper_id のチャンクを削除して入れ直す (索引は常に最新版のみ)
 
 ### 5.3 関連論文
 - 自前抽出: latex の `bbl` / `bib` から arXiv ID と DOI を抽出して arXiv 内の引用を作る (月次で更新)
@@ -102,27 +118,96 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 内容の近い論文: 論文の埋め込みの近傍
 - 引用は Iceberg に記録し, 問い合わせは PostgreSQL で返す (1〜2 段の辿りを想定)
 
-### 5.4 本文 (MVP に含む)
-- paper_text (TeX) からコメントを除き `\section` 単位で分割する. LLM は TeX をそのまま読めるため Markdown 化はしない
-- 新規論文の本文は, HF の paper_text と同等の組み立て処理を月次の取り込みで実装する
-- 節チャンクは MVP では BM25 のみ (ベクトルは件数が 1 億規模のため後回し)
+### 5.4 本文の加工 (MVP に含む)
+原本の TeX (paper_text, latex) はそのまま残し, 加工結果を派生テーブルに置く. 加工処理はバージョン (`normalizer_version`, `chunker_version`) を持ち, 変えた時は作り直す.
 
-### 5.5 MCP ツール (arxiv-mcp)
+**正規化** (検索と LLM の閲覧に使う. 軽い処理にとどめる)
+- コメントとプリアンブルを除く. プリアンブルの単純な `\newcommand` / `\def` (引数なし, 固定引数) は展開する
+- 書式コマンドは中身だけ残す (`\textbf{x}` → `x`), `\cite{k}` → `[cite]` (キーは引用抽出用に別に保持), `\ref` / `\eqref` → `[ref]`
+- 数式は LaTeX のまま残す. BM25 の対象からは解析器 (char_filter) で外す
+- 図表はキャプションを残し, 表は `content_type = table` とする
+- `\ref` を番号 (「Equation 3」など) に解決する処理はしない (実質 LaTeX のコンパイルが必要で, 件数に対して割に合わない)
+
+**節とチャンク** (読む単位と検索単位を分ける)
+| | 節 (`paper_sections`) | チャンク (`paper_chunks`) |
+|---|---|---|
+| 用途 | `get_outline` / `read_section` で LLM が読む | `search_passages` で検索する |
+| 単位 | `\section` / `\subsection` (階層を保持) | 節を段落で分け, 長い段落は文で分ける. 短い段落は隣と結合 |
+| 大きさ | 制限なし (長い節はページ送りで返す) | 目標 500〜800 トークン, 最大 1,000, 最小 100. オーバーラップなし (BM25 のみのため) |
+| 主な列 | paper_id, version, section_id, parent_id, level, ordinal, title, section_type, text, n_tokens, normalizer_version | chunk_id, paper_id, version, section_id, section_path, chunk_index, content_type, text, n_tokens, content_hash, chunker_version |
+
+- トークン数は埋め込みモデル (Qwen3-Embedding) のトークナイザで数える (将来チャンクにベクトルを付ける時と揃える)
+- `section_type`: 見出しから規則で分類する (intro / related / method / experiment / result / discussion / conclusion / appendix / other)
+- `chunk_id` = `{paper_id}:{section_id}:{chunk_index}`. `content_hash` で変更のないチャンクを判定し, 再埋め込みを省く
+- チャンクはオーバーラップなしのため, 同じ節のチャンクを順に連結すると節の本文になる
+- 新規論文の本文は, HF の paper_text と同等の組み立て処理を月次の取り込みで実装する
+- 全件の処理の前にサンプルで検証する (5.7)
+
+### 5.5 埋め込み
+| 項目 | 内容 |
+|---|---|
+| モデル | Qwen3-Embedding-0.6B (初期). BGE-M3 (dense) を比較用. 評価 (5.7) で確定する |
+| 対象 (MVP) | 論文 (314 万件). 本文チャンクのベクトルは MVP 後 |
+| 文書側の入力 | `Title: ...\n\nAbstract: ...` (インストラクションなし). カテゴリを含める版も評価で比べる |
+| 質問側の入力 | 固定のインストラクション付き (例: `Instruct: Given a research question, retrieve relevant arXiv papers\nQuery: {q}`) |
+| 次元・正規化 | 1024 次元, L2 正規化 (内積で検索). 次元の削減 (MRL) は評価で判断 |
+| 記録する情報 | model, model_revision (固定), input_template_version, dim, normalize. `paper_embeddings` と索引のメタデータに記録 |
+| 一括処理 | DGX Spark の GPU, KFP のパイプライン. 結果は `paper_embeddings` に書き, そこから索引に入れる |
+| 質問のベクトル化 | search1 の CPU (KServe). 目標は p95 300ms 以下. 1 件と同時 5〜10 件の遅延, CPU, メモリ, 起動時間を測る |
+
+- 文書側と質問側で同じモデル・revision・トークナイザ・正規化を使う. モデルを変える時は全件を作り直し, 新しい索引に切り替える (エイリアスで切り替え)
+
+### 5.6 OpenSearch の索引
+| 索引 | 1 文書 | 主なフィールド | 検索 | 設定 |
+|---|---|---|---|---|
+| `papers` | 論文 (最新版) | paper_id, title, abstract, authors, categories, primary_category, published_at, updated_at, version, embedding | BM25 (title, abstract) + kNN → RRF | `index.knn: true`, Faiss HNSW, fp16 (sq), innerproduct. codec は default (LZ4) |
+| `paper_chunks` | チャンク (最新版) | chunk_id, paper_id, version, section_id, section_path, section_type, chunk_index, content_type, text, title, categories, published_at, chunker_version | BM25 (text, title) | `index.knn: true` (MVP 後にベクトルのフィールドを追加できるように), codec は zstd (レベル 3) |
+
+- 索引には最新版だけを入れる. 文書 ID は `papers` = paper_id, `paper_chunks` = chunk_id
+- 実際の索引名に版を付け (`papers_v1` など), エイリアス (`papers`) で参照する. 作り直しは新しい索引を作ってから切り替える
+- `paper_chunks` の text は正規化した本文 (数式を含む) を保存し, 解析器の char_filter で数式を除いてから BM25 の索引を作る
+- ハイブリッド検索は search pipeline (RRF) で統合する. 候補は BM25・kNN それぞれ上位 50〜100 件
+- 容量の見積もり (推定, 5.7 の検証で実測する): `papers` 約 25GB, `paper_chunks` 80〜150GB (zstd, オーバーラップなし)
+- `index.codec` の比較 (default / zstd / zstd_no_dict) を 5.7 の検証で行う. zstd は保存フィールド (_source) だけを圧縮し, 索引作成とマージで CPU を使う
+- 将来: 本文チャンクのベクトル (数千万件) は on_disk モード (二値量子化 + 再スコアリング) を候補とする. その時は SATA SSD を追加する
+
+### 5.7 検証と評価
+**チャンク作成の検証** (全件の処理の前. HF の parquet を Kubeflow の Workspace から直接読むため, RustFS / Iceberg の構築と並行してできる)
+- 1,000 件で処理を確認し, 10,000 件 (cs.AI, cs.LG, math, physics, hep など代表的なカテゴリから) で統計を取る
+- 取る値: TeX の正規化の成功率, 節の抽出の成功率, 空の本文の件数, 節数 / 論文, チャンク数 / 論文 (平均・中央値・P95), トークン数 / チャンク (平均・中央値・P95), 表の件数, 重複チャンクの率
+- 索引の容量と作成時間 (codec 別) を測り, 全件に外挿する
+
+**検索の評価**
+- 評価データ (300〜1,000 件の質問):
+  - 引用の文脈: 本文中の引用を含む文を質問, 引用先の論文を正解とする (自前抽出の引用を使う)
+  - LLM で要旨から質問を作る (日本語の質問を含む)
+  - 手作りの質問 50〜100 件
+- 指標: Recall@10, Recall@50, MRR, nDCG@10
+- 比べるもの: 埋め込みモデル (Qwen3-Embedding-0.6B / BGE-M3), 文書側の入力 (カテゴリの有無), BM25 のみ / kNN のみ / hybrid (RRF)
+
+### 5.8 MCP ツール (arxiv-mcp)
 | ツール | 内容 |
 |---|---|
-| `search_papers(query, categories?, date_from?, date_to?, authors?, k?)` | ハイブリッド検索. 要約カード (ID, タイトル, 著者, 年, 要旨の抜粋, スコア) を返す |
-| `search_passages(query, paper_ids?, k?)` | 節チャンクの検索 |
+| `search_papers(query, categories?, date_from?, date_to?, authors?, k?)` | ハイブリッド検索 (固定). 要約カード (ID, タイトル, 著者, 年, 要旨の抜粋, スコア) を返す |
+| `search_passages(query, paper_ids?, section_types?, k?)` | 本文チャンクの検索. 節の種類 (method / experiment / result など) で絞り込める. チャンクの section_id を返す |
 | `get_paper(paper_id)` | 書誌, 版の一覧, arXiv の abs / PDF リンク |
-| `get_outline(paper_id)` / `read_section(paper_id, section_id)` | 目次を見てから必要な節だけ読む (ローカル LLM のコンテキスト節約) |
+| `get_outline(paper_id, version?)` | 目次 (section_id, 見出し, 階層, 節の種類, トークン数) |
+| `read_section(paper_id, section_id, version?, offset?)` | 節の本文 (正規化済み). 長い節はページ送り. 最新版は OpenSearch のチャンクを連結して返し, 過去の版は Iceberg から読む |
 | `get_references` / `get_citations` / `find_similar(paper_id)` | 関連論文を辿る |
 | `citation_graph(paper_id, depth<=2, limit)` | 引用の近傍をまとめて返す |
-| `run_sql(query)` | Trino への読み取り専用 SQL (タイムアウト, 行数上限) |
+| `run_sql(query)` | Trino への読み取り専用 SQL |
 | `get_pdf(paper_id, version?)` (任意) | PDF 本体 |
 
+- 検索方式 (keyword / semantic / hybrid) は MCP に出さない (LLM の引数の選び間違いを避ける). サーバー側で, arXiv ID は直接取得, 引用符付きの語句はフレーズ一致にする. 方式の切り替えは arxiv-api (開発・評価用) にだけ持たせる
+- `run_sql` の制限は Trino 側で強制する
+  - 専用ユーザー (`mcp_reader`) とアクセス制御ファイル: arxiv のスキーマの読み取りのみ, pdf / source / ps / latex の content 列は拒否
+  - resource groups (同時実行数, メモリ), `query_max_execution_time`, `query_max_scan_physical_bytes`
+  - arxiv-api 側: 返す行数の上限, 監査ログ
 - 公開範囲: 自宅ネットワーク内のみ. Keycloak の OAuth は MVP 後に対応する
 - ツールは arxiv-api を薄く包む (REST API と処理を共通化する)
+- 将来: `compare_papers(paper_ids, focus)` (複数論文の該当節をまとめて取得)
 
-### 5.6 LLM と GPU の運用
+### 5.9 LLM と GPU の運用
 | モード | spark1 | spark2 | LLM |
 |---|---|---|---|
 | A: LLM 1 台 | Qwen3.8-Flash-Next / Gemma4 (26B or 31B) | Kubeflow (学習, GPU Workspace, 埋め込み) | ローカル |
@@ -130,29 +215,58 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 | C: Kubeflow 占有 | Kubeflow | Kubeflow | Claude / OpenAI |
 
 - LLM の Deployment / LWS の replicas を 0 ⇄ 1 で切り替える (まずは手順書とスクリプト. 必要なら Kueue)
-- 質問のベクトル化は CPU のため, どのモードでも検索は止まらない
+- 質問のベクトル化は search1 の CPU のため, どのモードでも検索は止まらない
 - 確認事項: 各モデルの vLLM のツール呼び出し (`--tool-call-parser`) 対応, GLM5.3-Flash-Next の 2 台構成 (vLLM / TensorFold)
+
+### 5.10 検索ノード (search1)
+Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエージェントのサンドボックスを同居させる.
+
+| 用途 | メモリ | CPU (4 コア 8 スレッド) |
+|---|---|---|
+| OS, kubelet, DaemonSet | 約 2GB | |
+| OpenSearch (ヒープ 6〜8GB + ベクトル fp16 約 6.5GB + ページキャッシュ) | 約 24GB | 3 スレッド以上を残す |
+| 質問のベクトル化 | 約 2GB | |
+| エージェントのサンドボックス (agent-sandbox, 同時 6〜8 個) | 約 36GB | 上限の合計 4〜5 スレッド |
+
+| ディスク | 用途 |
+|---|---|
+| NVMe 500GB | OS, OpenSearch (`papers`, `paper_chunks`) |
+| SATA SSD (追加予定, 1〜2TB) | サンドボックスの作業領域. 将来の本文チャンクのベクトル |
+
+- taint と nodeSelector で, このノードには OpenSearch, 質問のベクトル化, サンドボックスだけを置く
+- OpenSearch は Guaranteed QoS (requests = limits) と高い PriorityClass. メモリが足りない時はサンドボックスが先に退避される
+- サンドボックス用の namespace に ResourceQuota (CPU, メモリ, ephemeral-storage) を設ける
+- サンドボックスの通信は Cilium の NetworkPolicy で制限する (OpenSearch への直接接続, k8s の API, 自宅 LAN は拒否. arxiv-mcp と LLM の API などは許可)
+- OpenSearch のデータはローカル PV. Longhorn はこのノードにレプリカを置かない
+- ホストの設定: `vm.max_map_count=262144`
+- バックアップ: OpenSearch のスナップショットを RustFS (バケット `opensearch-snapshots`) に定期的に取る. 障害時はスナップショットから戻すか, Iceberg から作り直す
+- 本文の一括索引作成の間 (数日) はサンドボックスを止めるか同時 1 個にする
+- サンドボックスの詳細 (DeepSeek Harness, OpenCode, Pi, Codex, Claude Code を agent-sandbox で動かす. 隔離は gVisor から) は別の設計メモにする
 
 ## 6. 後続タスク (進め方)
 | 手順 | 内容 | 状態 |
 |---|---|---|
 | 1 | RustFS を qnap-vm に構築 | ファイル作成済み (レビュー待ち) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 未着手 |
-| 3 | Trino | 未着手 |
-| 4 | OpenSearch | 未着手 |
+| 3 | Trino (`mcp_reader` の制限を含む) | 未着手 |
+| 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | 未着手 |
+| 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
 | 5 | データ移行 (案 B) | 未着手 |
-| 6 | 埋め込み (Spark GPU), 引用抽出 (自前 + OpenAlex), 本文の節分割, 索引 | 未着手 |
-| 7 | arxiv-api と arxiv-mcp | 未着手 |
-| 8 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | 未着手 |
-| 9 | Open WebUI + LiteLLM (まず Claude / OpenAI で確認) | 未着手 |
-| 別系統 | ローカル LLM の提供 (旧 Phase 3 の再開) | 未着手 |
+| 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
+| 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
+| 8 | arxiv-api と arxiv-mcp | 未着手 |
+| 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | 未着手 |
+| 10 | Open WebUI + LiteLLM (まず Claude / OpenAI で確認) | 未着手 |
+| 11 | 検索の評価と改善 (Reranker, 本文チャンクのベクトルなど) | 未着手 |
+| 別系統 | ローカル LLM の提供 (旧 Phase 3 の再開), エージェントのサンドボックス (search1) | 未着手 |
 
-見積もり: 作業 約 3〜4 週間 (レビューしながら進めた場合), 機械の処理 約 3〜5 日.
+見積もり: 作業 約 4〜5 週間 (レビューしながら進めた場合), 機械の処理 約 4〜7 日.
 
 その間にできなくなること:
 - コピー中 (1〜2 日): QNAP のディスクとネットワークが混む (Harbor, qnap-iscsi, llm-models が遅くなる). arxiv の PVC への書き込みは止める
-- 埋め込みの作成中 (数時間): Spark の GPU 2 つが埋まる (GPU Workspace, Trainer, ローカル LLM が使えない)
-- 節チャンクの索引作成中 (0.5〜2 日): worker の CPU / メモリ / ディスクが混む
+- 論文の埋め込みの作成中 (数時間): DGX Spark の GPU が埋まる (GPU Workspace, Trainer, ローカル LLM が使えない)
+- 全件の加工中 (1〜2 日): 加工を動かすノードの CPU と RustFS が混む
+- 本文の索引作成中 (数日): search1 の CPU が埋まる (サンドボックスは止めるか同時 1 個)
 - 最新化の仕組みができるまで: データは 2026-09 時点のまま
 
 ## 7. TODO
@@ -164,21 +278,40 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - [ ] バケット作成 Job (arxiv-warehouse, arxiv-raw) を実行する
 - [ ] 確認: `aws s3 ls`, コンソール (port-forward), qnap-vm で `multipath -ll`
 
+### 手順 4: 検索ノード search1
+- [ ] NUC のメモリを 64GB にする
+- [ ] OS を入れ, k8s のノードとして追加する (`kubeadm join`. kubelet-csr-approver の `providerRegex` にノード名を追加)
+- [ ] taint, ラベル, Longhorn のスケジューリング対象外, `vm.max_map_count` を設定する
+- [ ] ローカル PV (NVMe) を用意する
+- [ ] OpenSearch を入れ, 索引のテンプレート (5.6) とスナップショットのリポジトリ (RustFS) を設定する
+- [ ] 質問のベクトル化 (KServe, CPU) を入れて遅延を測る
+- [ ] SATA SSD を追加する (サンドボックスを動かす前, または本文索引の実測で必要になった時)
+
+### 検証と評価
+- [ ] チャンク作成の検証 (1,000 件 → 10,000 件) と統計
+- [ ] 索引の容量と作成時間 (codec 別) を測る
+- [ ] 評価データを作る (引用の文脈, LLM 生成, 手作り)
+
 ### 全体
 - [ ] `deploy/sciense-systems` のディレクトリ名の綴り (science) を直すか決める
 - [ ] science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする
 - [ ] AWS の認証情報 (requester-pays 用) を Vault に登録する
-- [ ] 埋め込みモデルを決める (多言語)
+- [ ] 埋め込みモデルを決める (評価で)
 - [ ] MCP ホスト (Open WebUI) から使うローカル LLM の提供方法を決める (vLLM のツール呼び出し対応の確認)
+- [ ] エージェントのサンドボックスの設計メモを書く
 
 ### MVP 後
 - [ ] Keycloak の OAuth (MCP サーバー, Open WebUI)
-- [ ] 節チャンクへのベクトル付与
+- [ ] Reranker (Qwen3-Reranker. GPU が前提)
+- [ ] 本文チャンクへのベクトル付与 (on_disk モード, SATA SSD)
+- [ ] sparse 検索 (BGE-M3 など) の評価
+- [ ] `compare_papers` ツール
 - [ ] Open Notebook (選んだ論文を深く読むノート. `add_to_notebook` で連携)
 - [ ] Hermes Agent (定期実行の自動化. 例: 新着論文の要約通知)
 - [ ] GPU の割り当て調整 (Kueue)
 
-## 8. 決定事項の記録 (2026-11-18)
+## 8. 決定事項の記録
+### 2026-11-18
 - データ移行は案 B. QNAP の空き 22TB, Synology 約 10TB を作業領域に使う
 - AWS アカウントは用意する (arXiv S3 の requester-pays)
 - 本文の読み取りを MVP に含める
@@ -187,6 +320,25 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - ローカル LLM: Gemma4 (26B / 31B), Qwen3.8-Flash-Next (Spark 1 台), GLM5.3-Flash-Next (Spark 2 台). 必要に応じて GPU を LLM と Kubeflow で切り替え, Claude / OpenAI でも使えるようにする
 - MCP ホストは Open WebUI + LiteLLM. Open Notebook と Hermes Agent は MVP 後の候補
 - RustFS のディスクは Kubernetes の PVC (qnap-iscsi)
+
+### 2026-11-18 (外部レビューの反映)
+- 加工結果 (節, チャンク, 埋め込み) を Iceberg の派生テーブルに置き, OpenSearch はそこから作り直せる派生物とする
+- 読む単位 (節) と検索単位 (チャンク) を分ける. チャンクは 500〜800 トークン, オーバーラップなし
+- 検索用の本文は軽く正規化する. `\ref` の番号の解決はしない
+- OpenSearch の索引は最新版のみ. 過去の版は Iceberg で扱う
+- 埋め込みは Qwen3-Embedding-0.6B から始め, 評価データで BGE-M3 と比べて決める. MVP は論文のみ, 本文チャンクは BM25 のみ
+- 全件の処理の前にチャンク作成の検証と評価データの作成を行う (インフラ構築と並行)
+- MCP に検索方式の引数は出さない. `run_sql` の制限は Trino 側で強制する
+- OpenSearch は Intel NUC (64GB に増設) を検索ノード search1 とし, ローカル NVMe の PV に置く. エージェントのサンドボックスと同居させる
+- `paper_chunks` の codec は zstd, `papers` は default
+
+### 外部レビューで採らなかった案と理由
+| 案 | 理由 |
+|---|---|
+| OpenSearch で過去の版も検索する | paper_text に過去の版の本文がない. 索引が約 1.6 倍になり, 検索結果が同じ論文の版で埋まる. 版の比較は閲覧の操作で, `read_section(version=)` で足りる |
+| `search_papers` に検索方式 (keyword / semantic / hybrid) の引数を付ける | ローカル LLM が引数を選び間違えやすい. hybrid (RRF) でほぼ両方を拾える. サーバー側の自動判定で補う |
+| `\ref` を番号に解決した検索用テキストを作る | 正しい番号を出すには実質 LaTeX のコンパイルが必要. 「Equation 3」で検索する需要もない |
+| `run_sql` を SQL パーサーで検証する | 抜け道が多く, 正しい SELECT でも大量のスキャンを防げない. Trino の権限と上限で強制する |
 
 ## 参考
 - arXiv bulk data on S3: https://info.arxiv.org/help/bulk_data_s3.html
@@ -197,3 +349,4 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - Open WebUI MCP: https://docs.openwebui.com/features/extensibility/mcp/
 - Hermes Agent: https://hermes-agent.nousresearch.com/docs
 - Open Notebook: https://github.com/lfnovo/open-notebook
+- Agent Sandbox (kubernetes-sigs): https://agent-sandbox.sigs.k8s.io/
