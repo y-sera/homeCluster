@@ -12,6 +12,7 @@ kubeadmによるインストールメモ
 
 ### nodeのnameserver
 192.168.1.1 (EdgeRouter X の dnsmasq. `k8sapiserver.cluster.orenet.net` は自身で応答し, `cluster.orenet.net` は 192.168.2.64 へ転送)
+ER-X の DNS 設定: memo/edgerouter-x_dns_memo.md
 
 ### 各種スペック
 - OS: ubuntu22.04
