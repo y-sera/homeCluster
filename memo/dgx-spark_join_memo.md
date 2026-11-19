@@ -30,11 +30,11 @@ df -h /
 ```
 
 ### DNS
-他ノードと揃えて 192.168.1.161 (Synology) を参照させる.
+他ノードと揃えて 192.168.1.1 (EdgeRouter X) を参照させる (2026-11-20 に Synology 192.168.1.161 から移行).
 LAN 側は NetworkManager 管理 (接続名は `nmcli -g NAME,DEVICE con show --active` で確認).
 ```
 resolvectl dns
-nmcli con mod "<接続名>" ipv4.dns 192.168.1.161
+nmcli con mod "<接続名>" ipv4.dns 192.168.1.1
 nmcli device reapply enP7s7
 getent hosts k8sapiserver.cluster.orenet.net   # 192.168.1.2 (kube-vip VIP) が返ること
 ```

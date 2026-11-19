@@ -11,7 +11,8 @@ kubeadmによるインストールメモ
 - worker3: 192.168.1.50
 
 ### nodeのnameserver
-192.168.1.161(nasのdnsを使用)
+192.168.1.1 (EdgeRouter X の dnsmasq. `k8sapiserver.cluster.orenet.net` は自身で応答し, `cluster.orenet.net` は 192.168.2.64 へ転送)
+2026-11-20 までは 192.168.1.161 (Synology NAS の DNS) を使用していた.
 
 ### 各種スペック
 - OS: ubuntu22.04
