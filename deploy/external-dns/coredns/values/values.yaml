@@ -37,7 +37,7 @@ servers:
       path /skydns
       endpoint http://etcd:2379
 # Kubernetes API サーバーの接続先 (kubeadm control-plane-endpoint, kubeconfig, cilium k8sServiceHost)。
-# レコードは Synology の DNS (192.168.1.161) が持つ (実体は kube-vip の VIP 192.168.1.2)。
+# レコードは EdgeRouter X (192.168.1.1) の dnsmasq が持つ (実体は kube-vip の VIP 192.168.1.2)。
 # cluster.orenet.net ブロックに forward を書いても、プラグインの実行順で etcd が先に NXDOMAIN を返すため、
 # より細かいゾーンの専用ブロックで転送する (CoreDNS は最も細かく一致するゾーンのブロックを使う)。
 - zones:
@@ -51,7 +51,7 @@ servers:
   - name: cache
     parameters: 30
   - name: forward
-    parameters: . 192.168.1.161
+    parameters: . 192.168.1.1
 - zones:
   - zone: .
   port: 53
