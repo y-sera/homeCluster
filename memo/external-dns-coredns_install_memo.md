@@ -30,7 +30,7 @@ Chart: coredns/coredns (https://coredns.github.io/helm) 1.50.5 / CoreDNS 1.14.7
 - 2026-11-13 にテスト用の etcd / coredns で確認済み (etcd 停止 40 秒後もキャッシュ済みの名前は応答, 未キャッシュの名前は SERVFAIL).
 
 ### k8sapiserver.cluster.orenet.net について
-- Kubernetes API サーバーの接続先 (kubeadm の `--control-plane-endpoint`, kubeconfig, cilium の `k8sServiceHost`). 実体は kube-vip の VIP 192.168.1.2 で, レコードは EdgeRouter X (192.168.1.1) の dnsmasq が持つ (`host-record=k8sapiserver.cluster.orenet.net,192.168.1.2` と `local=/k8sapiserver.cluster.orenet.net/`). 2026-11-20 に Synology の DNS (192.168.1.161) から移行.
+- Kubernetes API サーバーの接続先 (kubeadm の `--control-plane-endpoint`, kubeconfig, cilium の `k8sServiceHost`). 実体は kube-vip の VIP 192.168.1.2 で, レコードは EdgeRouter X (192.168.1.1) の dnsmasq が持つ (`host-record=k8sapiserver.cluster.orenet.net,192.168.1.2` と `local=/k8sapiserver.cluster.orenet.net/`).
 - `cluster.orenet.net` ブロック内に `forward k8sapiserver... 192.168.1.1` を書いても効かない. CoreDNS のプラグインの実行順は Corefile の記述順ではなく固定 (plugin.cfg) で, etcd が forward より先に実行され, ゾーン全体に NXDOMAIN を返すため. CoreDNS は最も細かく一致するゾーンのブロックを使うので, 専用ブロックで転送している.
 - EdgeRouter X は `server=/cluster.orenet.net/192.168.2.64` でゾーンをここへ転送している. k8sapiserver は `host-record` + `local=` でルーター自身が応答し (AAAA は NODATA), 上流へ転送しないため, 192.168.2.64 ⇔ 192.168.1.1 の間でループはしない.
 - `address=/k8sapiserver.../192.168.1.2` は使わないこと. ER-X の dnsmasq 2.85 では IPv4 だけの `address=` は AAAA を上流 (= 192.168.2.64) へ転送するため, AAAA がループしてタイムアウトする (2026-11-20 に発生).

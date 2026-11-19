@@ -30,7 +30,7 @@ df -h /
 ```
 
 ### DNS
-他ノードと揃えて 192.168.1.1 (EdgeRouter X) を参照させる (2026-11-20 に Synology 192.168.1.161 から移行).
+他ノードと揃えて 192.168.1.1 (EdgeRouter X) を参照させる.
 LAN 側は NetworkManager 管理 (接続名は `nmcli -g NAME,DEVICE con show --active` で確認).
 ```
 resolvectl dns
