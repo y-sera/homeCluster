@@ -57,6 +57,7 @@ QNAP の LUN だけをマルチパスの対象にする. **Longhorn のメモに
 defaults {
     user_friendly_names yes
     find_multipaths no
+    no_path_retry 120
 }
 blacklist {
     device {
@@ -71,6 +72,16 @@ blacklist_exceptions {
     }
 }
 ```
+
+`no_path_retry 120` は, QNAP の再起動(OS 更新など)で PV が read-only になるのを防ぐための設定.
+- 各 LUN は1パスのみのため, QNAP が止まると全パス断になる. 既定値(fail)では dm-multipath が I/O を即エラーで返し,
+  書き込み中の ext4 が journal abort して read-only で再マウントされる. パスが戻っても read-only のままで, Pod を作り直すまで直らない
+  (2026-11-17 の QNAP 再起動で gitlab-valkey / harbor-redis などが実際にこうなった).
+- 設定すると, 全パス断の間も I/O をエラーにせず `no_path_retry × polling_interval(既定5秒)` = 約10分キューで待たせる.
+  QNAP が戻れば I/O はそのまま再開し, Pod の再起動は不要.
+- 無期限の `queue` にしないのは, QNAP が戻らないときにプロセスが D state で固まり, Pod の削除や drain もできなくなるため.
+- 10分を超えて止まった場合は read-only になる. ノードで `journalctl -k | grep -E "Remounting filesystem read-only|Aborting journal"` を確認し,
+  該当する Pod を削除して再マウントする.
 
 ノード上のディスクとベンダー名の対応(worker1 で確認)
 | デバイス | VENDOR / MODEL | 用途 | マルチパス |
@@ -97,6 +108,8 @@ sudo systemctl reload multipathd
 # 5. 確認
 sudo multipath -ll
 #   → "mpathX (...) dm-N QNAP,iSCSI Storage" のみが表示されること
+#   → 各 mpath の次の行が features='1 queue_if_no_path' になっていること(no_path_retry が効いている)
+#      features='0' のままなら sudo multipathd reconfigure を実行して再確認する
 ```
 
 iscsid / kubelet / containerd / trident-node の再起動は不要.

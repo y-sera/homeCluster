@@ -101,6 +101,7 @@ cat > /etc/multipath.conf <<'EOF'
 defaults {
     user_friendly_names yes
     find_multipaths no
+    no_path_retry 120
 }
 blacklist {
     device {
@@ -119,6 +120,10 @@ multipath -d -v2                 # QNAP 以外 (NVMe など) が出ないこと 
 systemctl reload multipathd
 ```
 qnap-iscsi の PVC を使う Pod が載った後, `multipath -ll` で `QNAP,iSCSI Storage` の mpath が表示されること.
+
+その際, 各 mpath の `features` が `'1 queue_if_no_path'` になっていること.
+`no_path_retry 120` は QNAP 再起動時に PV が read-only になるのを防ぐ設定(全パス断の間, I/O を約10分キューで待たせる).
+理由と詳細は `memo/qnap-trident_install_memo.md` のマルチパス設定を参照.
 
 ## 2. containerd (CRI 有効化)
 
