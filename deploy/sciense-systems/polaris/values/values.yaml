@@ -34,6 +34,18 @@ storage:
 extraEnv:
 - name: AWS_REGION
   value: us-east-1
+# stsUnavailable のカタログでは, Polaris は storage.secret (polaris.storage.aws.*) ではなく
+# AWS SDK の既定の探索 (環境変数 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY など) で認証情報を探すため, 環境変数でも渡す
+- name: AWS_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: polaris-storage
+      key: access-key
+- name: AWS_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: polaris-storage
+      key: secret-key
 
 # 認証は Polaris 内部 (client_credentials でトークンを発行).
 # トークンの署名鍵は固定する (未指定だと Pod ごとに鍵が生成され, 再起動で発行済みトークンが無効になる)

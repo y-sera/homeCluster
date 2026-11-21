@@ -51,11 +51,12 @@ metadata:
   name: polaris-catalog-setup
   namespace: science-systems
 spec:
-  backoffLimit: 3
+  backoffLimit: 1
   ttlSecondsAfterFinished: 86400
   template:
     spec:
-      restartPolicy: OnFailure
+      # 失敗した Pod とログを残す
+      restartPolicy: Never
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
