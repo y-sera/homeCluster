@@ -251,7 +251,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 |---|---|---|
 | 1 | RustFS を構築 | 完了 (2026-11-21) |
 | 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 実行中 (2026-11-21 開始) |
-| 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 未着手 |
+| 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
 | 3 | Trino (`mcp_reader` の制限を含む) | 未着手 |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | 未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
@@ -293,6 +293,12 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] kubelet-csr-approver の `providerRegex` から qnap-vm を削除する. external-dns の etcd のコメントとメモを直す
 - [x] `kubectl drain qnap-vm --ignore-daemonsets` → `kubectl delete node qnap-vm` → qnap-vm で `kubeadm reset` → QNAP で VM を削除
 - [x] QNAP の iSCSI 設定から qnap-vm の initiator を削除する
+
+### 手順 2: Polaris
+- [x] CNPG の PostgreSQL (polaris-postgres, 18.7), RustFS のユーザー polaris (arxiv-warehouse のみ)
+- [x] realm POLARIS の初期化, Polaris 1.9.0 (ArgoCD science-polaris)
+- [x] カタログ arxiv (stsUnavailable: クライアントは各自の RustFS の認証情報を使う), 名前空間 arxiv, テーブル作成の確認
+- [ ] PostgreSQL のバックアップ (任意. 目録は metadata.json から登録し直せる)
 
 ### 手順 4: 検索ノード search1
 - [ ] NUC のメモリを 64GB にする
