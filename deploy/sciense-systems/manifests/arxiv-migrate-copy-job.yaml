@@ -86,6 +86,10 @@ spec:
           value: 64M
         - name: RCLONE_S3_DISABLE_CHECKSUM
           value: "true"
+        # マルチスレッドコピー (1 ファイルを複数の位置から並行に読む) を使わず, ファイルを先頭から順に読む.
+        # SMB (cifs) では先読みと重なり, 書き込みの約 3 倍を読み込んで 1GbE の受信を使い切っていたため
+        - name: RCLONE_MULTI_THREAD_STREAMS
+          value: "0"
         - name: RCLONE_STATS
           value: 1m
         - name: RCLONE_STATS_ONE_LINE
