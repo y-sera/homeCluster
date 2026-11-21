@@ -1,0 +1,68 @@
+# science-systems 用のバケットを RustFS に作成する Job (冪等. 既存バケットはスキップする).
+# RustFS の起動後に手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/rustfs/manifests/create-buckets-job.yaml
+#   kubectl -n science-systems logs job/science-rustfs-create-buckets
+# 再実行する場合は Job を削除してから apply する.
+#
+# バケット:
+# - arxiv-warehouse : Iceberg の warehouse (Polaris の catalog "arxiv" の保存先)
+# - arxiv-raw       : 取り込みの元データ (OAI-PMH の応答, arXiv S3 の manifest, OpenAlex の抽出結果など). 再処理と検証用
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: science-rustfs-create-buckets
+  namespace: science-systems
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: create-buckets
+        image: amazon/aws-cli:2.17.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: AWS_DEFAULT_REGION
+          value: us-east-1
+        - name: AWS_ENDPOINT_URL
+          value: http://science-rustfs-svc.science-systems.svc:9000
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        - name: BUCKETS
+          value: >-
+            arxiv-warehouse
+            arxiv-raw
+        command:
+        - sh
+        - -ec
+        - |
+          for b in $BUCKETS; do
+            if aws s3api head-bucket --bucket "$b" >/dev/null 2>&1; then
+              echo "exists : $b"
+            else
+              aws s3api create-bucket --bucket "$b" >/dev/null
+              echo "created: $b"
+            fi
+          done
+          echo "--- bucket list"
+          aws s3 ls

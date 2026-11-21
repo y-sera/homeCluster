@@ -1,0 +1,47 @@
+# science-systems 用 RustFS (単ノード). arXiv の Iceberg warehouse を置く.
+# 構成は gitlab 用 RustFS (deploy/gitlab/rustfs) と同じ standalone. chart の既定値との差分のみ記載する.
+# - データ領域は事前作成した PVC (manifests/pvc.yaml, qnap-iscsi 18Ti) を使う
+# - 初回のデータ移行 (SMB の arxiv-datasets → RustFS, 約 15TB) の間だけ qnap-vm に固定する.
+#   RustFS とコピーの Pod を QNAP 上で動かし, データが LAN を往復しないようにするため.
+#   qnap-vm (4 CPU / 約 5.7GiB) は taint node-role.kubernetes.io/qnap-storage:NoExecute があるため許容する
+# - 移行後は nodeSelector と tolerations を削除して worker に移し, qnap-vm は廃止する
+#   (qnap-iscsi の PV は Pod が載ったノードに attach し直されるため, データはそのまま使える)
+# - 冗長化は QNAP 側 (RAID) に任せる (単ノード単ディスクのため RustFS の erasure coding は使わない)
+mode:
+  standalone:
+    enabled: true
+    # RWO の PVC のため, 新旧の Pod が同時に起動しないようにする
+    strategy:
+      type: Recreate
+      rollingUpdate: null
+    existingClaim:
+      dataClaim: science-rustfs-data
+  distributed:
+    enabled: false
+
+secret:
+  existingSecret: science-rustfs-credentials
+
+config:
+  rustfs:
+    # ログはファイルに書かず標準出力のみ (logs 用 PVC を作らない)
+    obs_log_directory: ""
+
+# 移行の間だけ qnap-vm に固定する (移行後に削除)
+nodeSelector:
+  kubernetes.io/hostname: qnap-vm
+tolerations:
+- key: node-role.kubernetes.io/qnap-storage
+  operator: Exists
+  effect: NoExecute
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 4Gi
+
+# クラスタ内 (Polaris / Trino / 取り込みジョブ / Workspace) からのみ使う. コンソールは port-forward で開く
+ingress:
+  enabled: false

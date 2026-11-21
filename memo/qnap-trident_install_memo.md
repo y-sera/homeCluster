@@ -36,6 +36,10 @@ trident-node のログに空ポータル(`portal=":3260"`)への discovery 失�
 sudo apt install open-iscsi multipath-tools
 sudo systemctl enable --now iscsid multipathd
 ```
+qnap-smb (SMB) の PVC をマウントするノードには `cifs-utils` も必要.
+```bash
+sudo apt install cifs-utils
+```
 
 ### マルチパス設定(重要)
 QNAP CSI(Trident)は iSCSI ボリュームの接続時にマルチパスデバイス(`/dev/mapper/mpathX`)の作成を前提とする.
@@ -90,6 +94,19 @@ blacklist_exceptions {
 | sdc〜sdf | IET / VIRTUAL-DISK | Longhorn ボリューム | 対象外 |
 | sdg | SYNOLOGY / Storage | synology-csi(iSCSI) | 対象外 |
 | sdh | QNAP / iSCSI Storage | qnap-iscsi | **対象** |
+
+OS ディスクが virtio (`/dev/vda`) の VM (qnap-vm など) では, virtio ディスクはベンダーが `0x1af4`, モデル名が空のため,
+ベンダー名の指定で確実に除外できるとは限らない. `blacklist` に devnode を追加して明示的に除外する
+(QNAP の LUN は sd デバイスのため, この devnode の指定には一致しない).
+```
+blacklist {
+    devnode "^vd[a-z]+"
+    device {
+        vendor ".*"
+        product ".*"
+    }
+}
+```
 
 ### 反映手順
 ```bash

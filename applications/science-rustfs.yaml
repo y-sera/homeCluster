@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: science-rustfs
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://charts.rustfs.com
+    helm:
+      valueFiles:
+      - $configs/deploy/sciense-systems/rustfs/values/values.yaml
+      releaseName: science-rustfs
+    chart: rustfs
+    targetRevision: 1.0.6
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: science-systems
