@@ -1,0 +1,61 @@
+# Polaris の目録用 PostgreSQL (CloudNativePG).
+# 接続先: polaris-postgres-rw.science-systems.svc:5432 / DB: polaris / ユーザー: polaris / スキーマ: polaris_schema
+# 手動で apply する (GitLab の PostgreSQL と同じく, データを持つため ArgoCD の管理外):
+#   kubectl apply -f deploy/sciense-systems/polaris/manifests/postgres-external-secrets.yaml
+#   kubectl apply -f deploy/sciense-systems/polaris/manifests/postgres-cluster.yaml
+#
+# - 保存するのは目録 (カタログ, 名前空間, テーブルと最新の metadata.json の場所, 権限) のみで数十 MB 程度.
+#   テーブルの中身は RustFS にある. 目録を失っても metadata.json から register_table で登録し直せる (権限の設定は失われる)
+# - bootstrap は Cluster 作成時のみ使用される
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: polaris-postgres
+  namespace: science-systems
+spec:
+  # バックエンドは NAS 1 台のため単一インスタンスとする (GitLab の PostgreSQL と同じ方針)
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.7-standard-trixie
+
+  storage:
+    storageClass: qnap-iscsi
+    size: 5Gi
+
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: 128MB
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  bootstrap:
+    initdb:
+      database: polaris
+      owner: polaris
+      secret:
+        name: polaris-postgres-app
+      # Polaris のテーブルを置くスキーマ. Polaris は作成しないため事前に作る
+      # (Polaris の currentSchema=POLARIS_SCHEMA は引用符なしで渡され, 小文字の polaris_schema になる)
+      postInitApplicationSQL:
+      - CREATE SCHEMA IF NOT EXISTS polaris_schema AUTHORIZATION polaris
+---
+# CNPG Cluster polaris-postgres のメトリクス収集 (各インスタンスの metrics ポート 9187)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: polaris-postgres
+  namespace: science-systems
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: polaris-postgres
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+  - port: metrics

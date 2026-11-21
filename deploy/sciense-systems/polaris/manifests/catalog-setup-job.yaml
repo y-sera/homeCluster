@@ -1,0 +1,135 @@
+# Polaris にカタログ arxiv と名前空間 arxiv を作る Job. 最後にテーブルの作成・削除で RustFS への書き込みを確認する.
+# Polaris のサーバーが起動してから手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/polaris/manifests/catalog-setup-job.yaml
+#   kubectl -n science-systems logs job/polaris-catalog-setup
+# 冪等 (既存のカタログ・名前空間はそのままにする). 再実行する場合は Job を削除してから apply する.
+#
+# カタログ arxiv:
+# - 保存先 s3://arxiv-warehouse (テーブルの既定の場所は s3://arxiv-warehouse/<名前空間>/<テーブル>.
+#   初回のデータ移行でコピーした parquet は s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/ にあり, add_files で登録する)
+# - RustFS は STS がないため stsUnavailable: true (クライアントへの認証情報の払い出しを行わない.
+#   Trino / PyIceberg / Spark は各自の S3 の認証情報を使う), パス形式のアクセス (pathStyleAccess: true)
+# - Polaris の Management API で設定する値はカタログのプロパティとして認証済みのクライアントに返されるため, 秘密情報は入れない
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: polaris-catalog-setup
+  namespace: science-systems
+data:
+  catalog-arxiv.json: |
+    {
+      "catalog": {
+        "name": "arxiv",
+        "type": "INTERNAL",
+        "properties": {
+          "default-base-location": "s3://arxiv-warehouse"
+        },
+        "storageConfigInfo": {
+          "storageType": "S3",
+          "allowedLocations": ["s3://arxiv-warehouse/"],
+          "region": "us-east-1",
+          "endpoint": "http://science-rustfs-svc.science-systems.svc:9000",
+          "endpointInternal": "http://science-rustfs-svc.science-systems.svc:9000",
+          "pathStyleAccess": true,
+          "stsUnavailable": true
+        }
+      }
+    }
+  smoke-table.json: |
+    {
+      "name": "t",
+      "schema": {
+        "type": "struct",
+        "schema-id": 0,
+        "fields": [{"id": 1, "name": "id", "required": false, "type": "long"}]
+      }
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: polaris-catalog-setup
+  namespace: science-systems
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: setup
+        image: curlimages/curl:8.22.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: BASE
+          value: http://polaris.science-systems.svc:8181
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: polaris-root
+              key: client-id
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: polaris-root
+              key: client-secret
+        command:
+        - sh
+        - -ec
+        - |
+          cd /tmp
+          TOKEN=$(curl -sf "$BASE/api/catalog/v1/oauth/tokens" \
+            -d grant_type=client_credentials -d client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" \
+            -d scope=PRINCIPAL_ROLE:ALL | sed -n 's/.*"access_token" *: *"\([^"]*\)".*/\1/p')
+          [ -n "$TOKEN" ] || { echo "NG: failed to get token"; exit 1; }
+          echo "OK: token"
+          # $1=method $2=path $3=body(file or empty) $4=accepted codes
+          call() {
+            if [ -n "$3" ]; then
+              code=$(curl -s -o out.json -w '%{http_code}' -X "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' "$BASE$2" --data @"$3")
+            else
+              code=$(curl -s -o out.json -w '%{http_code}' -X "$1" -H "Authorization: Bearer $TOKEN" "$BASE$2")
+            fi
+            echo "$1 $2 -> $code"
+            case " $4 " in *" $code "*) ;; *) cat out.json; echo; exit 1;; esac
+          }
+          echo "=== catalog arxiv"
+          call POST /api/management/v1/catalogs /cfg/catalog-arxiv.json "201 409"
+          call GET /api/management/v1/catalogs/arxiv "" "200"; cat out.json; echo
+          echo "=== namespace arxiv"
+          echo '{"namespace":["arxiv"]}' > ns.json
+          call POST /api/catalog/v1/arxiv/namespaces ns.json "200 409"
+          echo "=== smoke test (create / load / drop table smoke_test.t)"
+          echo '{"namespace":["smoke_test"]}' > ns2.json
+          call POST /api/catalog/v1/arxiv/namespaces ns2.json "200 409"
+          call POST /api/catalog/v1/arxiv/namespaces/smoke_test/tables /cfg/smoke-table.json "200 409"
+          call GET /api/catalog/v1/arxiv/namespaces/smoke_test/tables/t "" "200"
+          echo "metadata-location: $(sed -n 's/.*"metadata-location" *: *"\([^"]*\)".*/\1/p' out.json)"
+          call DELETE "/api/catalog/v1/arxiv/namespaces/smoke_test/tables/t?purgeRequested=true" "" "204 400 403"
+          [ "$code" = 204 ] || call DELETE /api/catalog/v1/arxiv/namespaces/smoke_test/tables/t "" "204"
+          call DELETE /api/catalog/v1/arxiv/namespaces/smoke_test "" "204"
+          echo "=== namespaces"
+          call GET /api/catalog/v1/arxiv/namespaces "" "200"; cat out.json; echo
+          echo "done"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cfg
+          mountPath: /cfg
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cfg
+        configMap:
+          name: polaris-catalog-setup

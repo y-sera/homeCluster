@@ -1,0 +1,74 @@
+# Polaris の realm (POLARIS) を初期化する Job (admin tool の bootstrap).
+# PostgreSQL のスキーマ polaris_schema に Polaris のテーブルを作り, realm と root の認証情報を登録する.
+# PostgreSQL (polaris-postgres) が起動し, Secret polaris-persistence / polaris-root が SecretSynced になってから,
+# Polaris のサーバーより先に手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/polaris/manifests/bootstrap-job.yaml
+#   kubectl -n science-systems logs job/polaris-bootstrap
+# bootstrap は冪等 (初期化済みの realm には何もしない). 再実行する場合は Job を削除してから apply する.
+# - admin tool のバージョンはサーバー (chart の image.tag) と揃える
+# - root の client_secret を変える場合は bootstrap ではなく Polaris の API (principal の rotate) で行う
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: polaris-bootstrap
+  namespace: science-systems
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 185
+        runAsGroup: 185
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: bootstrap
+        image: apache/polaris-admin-tool:1.9.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: POLARIS_PERSISTENCE_TYPE
+          value: relational-jdbc
+        - name: QUARKUS_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: polaris-persistence
+              key: username
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: polaris-persistence
+              key: password
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          valueFrom:
+            secretKeyRef:
+              name: polaris-persistence
+              key: jdbcUrl
+        - name: ROOT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: polaris-root
+              key: client-secret
+        # イメージ既定の起動スクリプト (run-java.sh) は実行するコマンドを引数ごとログに出力し,
+        # client_secret がログに残るため, java を直接実行する
+        command:
+        - java
+        - -XX:MaxRAMPercentage=75.0
+        - -jar
+        - /deployments/polaris-admin-tool.jar
+        # -c <realm>,<client_id>,<client_secret>
+        args:
+        - bootstrap
+        - --realm=POLARIS
+        - --credential=POLARIS,root,$(ROOT_CLIENT_SECRET)
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi

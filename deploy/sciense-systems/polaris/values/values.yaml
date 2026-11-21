@@ -1,0 +1,56 @@
+# science-systems 用 Apache Polaris (Iceberg REST カタログ). arXiv の Iceberg テーブルの入口を管理する.
+# chart の既定値との差分のみ記載する.
+# - 目録 (カタログ, 名前空間, テーブルと最新の metadata.json の場所, 権限) は PostgreSQL (CNPG, polaris-postgres) に保存する.
+#   テーブルの中身と構造 (データ, manifest, metadata.json) は RustFS (s3://arxiv-warehouse) に Iceberg の形式で置かれる
+# - realm の初期化 (テーブル作成, root の認証情報) は admin tool の Job (manifests/bootstrap-job.yaml) で行う
+# - カタログ arxiv の作成は manifests/catalog-setup-job.yaml で行う (RustFS は STS がないため stsUnavailable: true.
+#   クライアント (Trino / PyIceberg / Spark) への認証情報の払い出しは行われず, クライアントは各自の S3 の認証情報を使う)
+# - クラスタ内 (Trino / 取り込みジョブ / Workspace) からのみ使う. Ingress は作らない
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+# 目録の保存先
+persistence:
+  type: relational-jdbc
+  relationalJdbc:
+    # username / password / jdbcUrl を持つ Secret (manifests/postgres-external-secrets.yaml)
+    secret:
+      name: polaris-persistence
+    # 既定 (currentSchema: POLARIS_SCHEMA → PostgreSQL では polaris_schema) のまま.
+    # スキーマは CNPG の postInitApplicationSQL で作成する (manifests/postgres-cluster.yaml)
+
+# Polaris サーバー自身が RustFS (metadata.json の読み書き) に使う認証情報 (RustFS のユーザー polaris)
+storage:
+  secret:
+    name: polaris-storage
+    awsAccessKeyId: access-key
+    awsSecretAccessKey: secret-key
+
+extraEnv:
+- name: AWS_REGION
+  value: us-east-1
+
+# 認証は Polaris 内部 (client_credentials でトークンを発行).
+# トークンの署名鍵は固定する (未指定だと Pod ごとに鍵が生成され, 再起動で発行済みトークンが無効になる)
+authentication:
+  type: internal
+  tokenBroker:
+    type: rsa-key-pair
+    secret:
+      name: polaris-token-keys
+      rsaKeyPair:
+        publicKey: public.pem
+        privateKey: private.pem
+
+features:
+  SUPPORTED_CATALOG_STORAGE_TYPES:
+  - S3
+
+serviceMonitor:
+  labels:
+    release: prometheus
