@@ -101,6 +101,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - コピー先: 中身系は `s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/<元のファイル名>` (catalog arxiv の既定の場所の下), 索引系と README / SHA256SUMS は `s3://arxiv-raw/hf/arxiv-complete/<元のパス>`
 - コピーは rclone の Job (`deploy/sciense-systems/manifests/arxiv-migrate-copy-job.yaml`) で, RustFS と同じ worker で行う. 確認は SHA256SUMS との照合 (`arxiv-migrate-verify-job.yaml`)
 - qnap-vm (QNAP 上の VM) での実行は VM の CPU が上限になり約 49MB/s だったため不採用. worker は 1GbE の送受信を両方使い約 100MB/s (2026-11-21 に測定)
+- rclone のマルチスレッドコピーは cifs の先読みと重なり読み込みが約 3 倍に増える (約 30MiB/s) ため無効にする (約 90MiB/s)
 
 ### 5.2 最新化 (必須)
 | 対象 | 取得元 | 頻度 | 処理 |
@@ -287,11 +288,11 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [ ] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する
 - [ ] SMB の PVC (arxiv-datasets) の削除は手順 5b の検証後
 
-### qnap-vm の廃止
+### qnap-vm の廃止 (2026-11-22 完了)
 - [x] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
-- [ ] kubelet-csr-approver の `providerRegex` から qnap-vm を削除する. external-dns の etcd のコメントとメモを直す
-- [ ] `kubectl drain qnap-vm --ignore-daemonsets` → `kubectl delete node qnap-vm` → qnap-vm で `kubeadm reset` → QNAP で VM を削除
-- [ ] QNAP の iSCSI 設定から qnap-vm の initiator を削除する
+- [x] kubelet-csr-approver の `providerRegex` から qnap-vm を削除する. external-dns の etcd のコメントとメモを直す
+- [x] `kubectl drain qnap-vm --ignore-daemonsets` → `kubectl delete node qnap-vm` → qnap-vm で `kubeadm reset` → QNAP で VM を削除
+- [x] QNAP の iSCSI 設定から qnap-vm の initiator を削除する
 
 ### 手順 4: 検索ノード search1
 - [ ] NUC のメモリを 64GB にする
