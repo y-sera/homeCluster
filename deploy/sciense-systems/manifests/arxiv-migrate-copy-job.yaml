@@ -1,0 +1,129 @@
+# arXiv データセット (PVC arxiv-datasets, SMB) を RustFS にコピーする Job (初回のデータ移行, 案 B の手順 5a).
+# 手動で apply する. 途中で止まっても再実行すれば, コピー済みのファイル (サイズと更新日時が同じ) は飛ばして続きから再開する:
+#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-migrate-copy-job.yaml
+#   kubectl -n science-systems logs -f job/arxiv-migrate-copy
+# 再実行する場合は Job を削除してから apply する.
+#
+# - RustFS と同じ worker で動かす. 1GbE の送受信を両方使い, 約 100MB/s (約 15TB で 2 日弱).
+#   qnap-vm で動かした場合は VM の CPU が上限になり約 49MB/s だった (SMB も iSCSI も VM の中ではネットワーク処理のため)
+# - コピー中は QNAP と worker の 1GbE を使い切るため, Harbor / GitLab / qnap-iscsi が遅くなる.
+#   抑えたい場合は env に RCLONE_BWLIMIT (例: 80M) を追加する
+# - parquet は書き直さずにそのままコピーし, 後で Iceberg の add_files で登録する. コピー先:
+#     本文・中身系 (paper_text, latex, ps, source, pdf) : s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/<元のファイル名>
+#       (Polaris の catalog arxiv の既定の場所 <warehouse>/<namespace>/<table> の下. 月次の追記は data/ の下に別名で入る)
+#     索引系 (metadata, versions, files) と sample, README など : s3://arxiv-raw/hf/arxiv-complete/<元のパス>
+#       (Iceberg テーブルとしては書き直すため, 元の parquet は再処理・検証用に arxiv-raw に残す)
+# - 小さいものから順にコピーする (最初の数十分で速度を確認できるように)
+# - --s3-disable-checksum: アップロード前に MD5 を計算するためにファイルを 2 回読むのを避ける (HDD の読み込みが倍になるため).
+#   中身の確認は別の Job (arxiv-migrate-verify-job.yaml) で RustFS から読み直し, SHA256SUMS (HF の LFS の sha256) と照合する
+# - 認証情報は RustFS の root (移行作業のみ. Polaris / Trino などは後続の手順で個別のユーザーを作る)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arxiv-migrate-copy
+  namespace: science-systems
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      # RustFS と同じノードで動かす (rclone → RustFS の通信をノード内で済ませ, LAN は SMB の読み込みと iSCSI の書き込みだけにする)
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: science-rustfs
+                app.kubernetes.io/name: rustfs
+            topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: copy
+        image: rclone/rclone:1.75.2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: RCLONE_CONFIG
+          value: /tmp/rclone.conf
+        # コピー先 (RustFS) の設定. 名前 "dst"
+        - name: RCLONE_CONFIG_DST_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_DST_PROVIDER
+          value: Other
+        - name: RCLONE_CONFIG_DST_ENDPOINT
+          value: http://science-rustfs-svc.science-systems.svc:9000
+        - name: RCLONE_CONFIG_DST_REGION
+          value: us-east-1
+        - name: RCLONE_CONFIG_DST_FORCE_PATH_STYLE
+          value: "true"
+        - name: RCLONE_CONFIG_DST_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: RCLONE_CONFIG_DST_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        # メモリを抑える.
+        # バッファは概ね transfers × upload_concurrency × chunk_size = 4 × 2 × 64MiB = 512MiB
+        - name: RCLONE_TRANSFERS
+          value: "4"
+        - name: RCLONE_S3_UPLOAD_CONCURRENCY
+          value: "2"
+        - name: RCLONE_S3_CHUNK_SIZE
+          value: 64M
+        - name: RCLONE_S3_DISABLE_CHECKSUM
+          value: "true"
+        - name: RCLONE_STATS
+          value: 1m
+        - name: RCLONE_STATS_ONE_LINE
+          value: "true"
+        - name: RCLONE_RETRIES
+          value: "5"
+        command:
+        - sh
+        - -ec
+        - |
+          RAW=dst:arxiv-raw/hf/arxiv-complete
+          echo "=== $(date -u +%FT%TZ) raw (README, SHA256SUMS, metadata, versions, files, sample) -> $RAW"
+          rclone copy /src "$RAW" -v \
+            --include "/README.md" --include "/LICENSE" --include "/SHA256SUMS" --include "/.gitattributes" \
+            --include "/metadata/**" --include "/versions/**" --include "/files/**" --include "/sample/**"
+          for t in paper_text latex ps source pdf; do
+            echo "=== $(date -u +%FT%TZ) $t -> dst:arxiv-warehouse/arxiv/$t/data/hf"
+            rclone copy "/src/$t" "dst:arxiv-warehouse/arxiv/$t/data/hf" -v --include "*.parquet"
+          done
+          echo "=== $(date -u +%FT%TZ) done"
+          rclone size dst:arxiv-raw
+          rclone size dst:arxiv-warehouse
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            memory: 1536Mi
+        volumeMounts:
+        - name: src
+          mountPath: /src
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: src
+        persistentVolumeClaim:
+          claimName: arxiv-datasets
+          readOnly: true
+      - name: tmp
+        emptyDir: {}

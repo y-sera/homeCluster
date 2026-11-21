@@ -1,0 +1,111 @@
+# 初回のデータ移行の確認 Job. RustFS にコピーした parquet (3,745 ファイル) を読み直して sha256 を計算し,
+# データセットの SHA256SUMS (HF の LFS の sha256) と照合する.
+# コピーの Job (arxiv-migrate-copy) が完了してから手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-migrate-verify-job.yaml
+#   kubectl -n science-systems logs -f job/arxiv-migrate-verify
+# 一致すれば "OK: all N files match" を出力して成功する. 不一致・欠落があれば差分を出力して失敗する.
+# 結果は s3://arxiv-raw/hf/arxiv-complete/_verify/ に保存する.
+#
+# - SMB の PVC (arxiv-datasets) を削除する前に必ず成功させる (削除は元に戻せないため)
+# - 全量 (約 15TB) を RustFS から読むため時間がかかる (iSCSI の読み込みが 1GbE で上限, 約 2 日弱). RustFS と同じ worker で動かす
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arxiv-migrate-verify
+  namespace: science-systems
+spec:
+  # 失敗時に全量の読み直しを繰り返さない (原因を確認してから Job を作り直す)
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      # RustFS と同じノードで動かす (rclone → RustFS の通信をノード内で済ませ, LAN は SMB の読み込みと iSCSI の書き込みだけにする)
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: science-rustfs
+                app.kubernetes.io/name: rustfs
+            topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: verify
+        image: rclone/rclone:1.75.2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: RCLONE_CONFIG
+          value: /tmp/rclone.conf
+        - name: RCLONE_CONFIG_DST_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_DST_PROVIDER
+          value: Other
+        - name: RCLONE_CONFIG_DST_ENDPOINT
+          value: http://science-rustfs-svc.science-systems.svc:9000
+        - name: RCLONE_CONFIG_DST_REGION
+          value: us-east-1
+        - name: RCLONE_CONFIG_DST_FORCE_PATH_STYLE
+          value: "true"
+        - name: RCLONE_CONFIG_DST_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: RCLONE_CONFIG_DST_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        # 同時に読むファイル数
+        - name: RCLONE_CHECKERS
+          value: "4"
+        command:
+        - sh
+        - -ec
+        - |
+          RAW=dst:arxiv-raw/hf/arxiv-complete
+          cd /tmp
+          rclone cat "$RAW/SHA256SUMS" | grep -v '^#' | grep . | sort -k2 > expected.txt
+          : > actual.txt
+          echo "=== $(date -u +%FT%TZ) raw (metadata, versions, files, sample)"
+          rclone hashsum sha256 --download "$RAW" \
+            --include "/metadata/**" --include "/versions/**" --include "/files/**" --include "/sample/**" >> actual.txt
+          for t in paper_text latex ps source pdf; do
+            echo "=== $(date -u +%FT%TZ) $t"
+            rclone hashsum sha256 --download "dst:arxiv-warehouse/arxiv/$t/data/hf" | sed "s#  #  $t/#" >> actual.txt
+          done
+          sort -k2 actual.txt -o actual.txt
+          rclone copyto expected.txt "$RAW/_verify/sha256-expected.txt"
+          rclone copyto actual.txt "$RAW/_verify/sha256-rustfs.txt"
+          echo "=== $(date -u +%FT%TZ) compare"
+          if diff expected.txt actual.txt > diff.txt; then
+            echo "OK: all $(wc -l < expected.txt) files match"
+          else
+            echo "NG: mismatch or missing files (< expected, > rustfs)"
+            cat diff.txt
+            rclone copyto diff.txt "$RAW/_verify/sha256-diff.txt"
+            exit 1
+          fi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

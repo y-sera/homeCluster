@@ -4,7 +4,7 @@
 # (ArgoCD の同期や chart の削除でデータ領域が消えないようにするため. StorageClass も Retain).
 #   kubectl apply -f deploy/sciense-systems/rustfs/manifests/pvc.yaml
 #
-# - qnap-iscsi は RWO. 初回のデータ移行の間は RustFS の Pod を qnap-vm に固定し, 移行後は worker に移す (values の nodeSelector)
+# - qnap-iscsi は RWO. RustFS の Pod が載った worker に attach される (values の strategy は Recreate)
 # - Pod が載るノードに open-iscsi / multipath-tools と QNAP 用 multipath.conf が必要 (memo/qnap-trident_install_memo.md)
 # - 容量は allowVolumeExpansion: true のため後から拡張できる
 # - シンプロビジョニング (arxiv-datasets / llm-models と同じ). 確保量ではなく実使用量だけ QNAP の容量を消費する
