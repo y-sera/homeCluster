@@ -24,7 +24,8 @@ persistence:
     # 既定 (currentSchema: POLARIS_SCHEMA → PostgreSQL では polaris_schema) のまま.
     # スキーマは CNPG の postInitApplicationSQL で作成する (manifests/postgres-cluster.yaml)
 
-# Polaris サーバー自身が RustFS (metadata.json の読み書き) に使う認証情報 (RustFS のユーザー polaris)
+# Polaris サーバー自身が RustFS (metadata.json の読み書き) に使う認証情報 (RustFS のユーザー polaris).
+# stsUnavailable のカタログでは実際には extraEnv の AWS_* が使われる (下記). 設定の対応を明示するため残す
 storage:
   secret:
     name: polaris-storage

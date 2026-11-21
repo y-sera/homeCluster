@@ -9,6 +9,8 @@
 #   初回のデータ移行でコピーした parquet は s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/ にあり, add_files で登録する)
 # - RustFS は STS がないため stsUnavailable: true (クライアントへの認証情報の払い出しを行わない.
 #   Trino / PyIceberg / Spark は各自の S3 の認証情報を使う), パス形式のアクセス (pathStyleAccess: true)
+# - 確認用のテーブル smoke_test.t は削除するが, Polaris の purge (ファイルの削除) は既定で無効 (403) のため
+#   s3://arxiv-warehouse/smoke_test/ に metadata.json が残る. RustFS の root で削除する (memo/polaris_install_memo.md)
 # - Polaris の Management API で設定する値はカタログのプロパティとして認証済みのクライアントに返されるため, 秘密情報は入れない
 apiVersion: v1
 kind: ConfigMap
