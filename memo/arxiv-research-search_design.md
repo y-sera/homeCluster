@@ -54,7 +54,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
  arxiv-mcp ── arxiv-api (FastAPI) ─┬─ OpenSearch [search1] : 論文 (hybrid) / 本文チャンク (BM25)
                                    ├─ 質問のベクトル化 [search1, CPU]
                                    ├─ PostgreSQL : 引用グラフ, 書誌キャッシュ
-                                   └─ Trino ── Polaris (+PostgreSQL) ── Iceberg on RustFS (qnap-vm)
+                                   └─ Trino ── Polaris (+PostgreSQL) ── Iceberg on RustFS (worker)
                                                                          ├─ 正本 : metadata / versions / files / paper_text / latex / source / pdf / ps
                                                                          └─ 派生 : paper_sections / paper_chunks / paper_embeddings / citations
  取り込み・加工 (CronJob / KFP)
@@ -68,7 +68,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 ### 構成要素
 | 要素 | 配置 | 内容 |
 |---|---|---|
-| RustFS | qnap-vm (taint 許容, nodeSelector) | 単ノード単ディスク (standalone). データは qnap-iscsi の PVC (18Ti, シン). 冗長化は QNAP の RAID |
+| RustFS | worker (初回のデータ移行の間だけ qnap-vm に固定) | 単ノード単ディスク (standalone). データは qnap-iscsi の PVC (18Ti, シン). 冗長化は QNAP の RAID |
 | Polaris + PostgreSQL (CNPG) | worker | Iceberg REST カタログ. catalog `arxiv`, `stsUnavailable: true`, `pathStyleAccess: true` |
 | Trino | worker | Iceberg コネクタ (REST カタログ). 分析 SQL と API の裏側 |
 | OpenSearch | search1 (NUC) | 単一ノード. データはローカル NVMe の PV. 論文の索引 (314 万件, 埋め込み付き), 本文チャンクの索引 (BM25). スナップショットを RustFS に取る |
@@ -98,7 +98,8 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 容量: QNAP の空き 22TB に RustFS (約 15TB) を置き, 検証後に SMB の PVC (約 15TB) を削除する. Synology (約 10TB) は作業領域として使う
 - 索引系 (metadata, versions, files): 書き直して Iceberg テーブルにする. 識別キー (paper_id / (paper_id, version)) を設け MERGE 可能にし, 投稿月やカテゴリで分割する
 - テキスト・中身系 (paper_text, latex, source, pdf, ps): parquet を RustFS にコピーし `add_files` で登録する (書き直さない). paper_id 順のため統計で読み飛ばせる
-- コピーは qnap-vm 上の Pod で行い, QNAP の近くで処理する
+- コピーは qnap-vm 上の Pod で行い, QNAP の近くで処理する (RustFS も移行の間は qnap-vm に固定し, データが LAN を往復しないようにする)
+- 移行後は RustFS を worker に移し (values の nodeSelector と tolerations を削除), qnap-vm を廃止する
 
 ### 5.2 最新化 (必須)
 | 対象 | 取得元 | 頻度 | 処理 |
@@ -246,7 +247,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 ## 6. 後続タスク (進め方)
 | 手順 | 内容 | 状態 |
 |---|---|---|
-| 1 | RustFS を qnap-vm に構築 | ファイル作成済み (レビュー待ち) |
+| 1 | RustFS を構築 (移行の間は qnap-vm) | 完了 (2026-11-21) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 未着手 |
 | 3 | Trino (`mcp_reader` の制限を含む) | 未着手 |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | 未着手 |
@@ -271,12 +272,19 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 
 ## 7. TODO
 ### 手順 1: RustFS
-- [ ] qnap-vm に open-iscsi / multipath-tools を導入し, QNAP 用の `/etc/multipath.conf` を設定する (`qnap-trident_install_memo.md`. sudo のため手動)
-- [ ] Vault に `eso/science-rustfs` (access-key, secret-key) を登録する
-- [ ] ExternalSecret と PVC を apply し, 18Ti の LUN が作成できることを確認する
-- [ ] Application `science-rustfs` を登録・同期し, Pod が qnap-vm で起動することを確認する
-- [ ] バケット作成 Job (arxiv-warehouse, arxiv-raw) を実行する
-- [ ] 確認: `aws s3 ls`, コンソール (port-forward), qnap-vm で `multipath -ll`
+- [x] qnap-vm に open-iscsi / multipath-tools / cifs-utils を導入し, QNAP 用の `/etc/multipath.conf` を設定する (`qnap-trident_install_memo.md`. virtio ディスクのため devnode `^vd[a-z]+` も除外)
+- [x] Vault に `eso/science-rustfs` (access-key, secret-key) を登録する
+- [x] ExternalSecret と PVC を apply し, 18Ti の LUN が作成できることを確認する
+- [x] Application `science-rustfs` を登録・同期し, Pod が qnap-vm で起動することを確認する
+- [x] バケット作成 Job (arxiv-warehouse, arxiv-raw) を実行する
+- [x] 確認: `aws s3 ls`, qnap-vm で `/dev/mapper/mpatha` (QNAP iSCSI Storage 18T) が /data にマウントされていること
+- [ ] 確認: qnap-vm で `sudo multipath -ll` が `features='1 queue_if_no_path'` であること, コンソール (port-forward)
+
+### 移行後: qnap-vm の廃止
+- [ ] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
+- [ ] kubelet-csr-approver の `providerRegex` から qnap-vm を削除する. external-dns の etcd のコメントとメモを直す
+- [ ] `kubectl drain qnap-vm --ignore-daemonsets` → `kubectl delete node qnap-vm` → qnap-vm で `kubeadm reset` → QNAP で VM を削除
+- [ ] QNAP の iSCSI 設定から qnap-vm の initiator を削除する
 
 ### 手順 4: 検索ノード search1
 - [ ] NUC のメモリを 64GB にする
