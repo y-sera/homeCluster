@@ -19,7 +19,7 @@ namespace: external-dns
 ## 設定 (`deploy/external-dns/etcd/manifests/`)
 | ファイル | 内容 |
 |---|---|
-| statefulset.yaml | etcd v3.7.3, 3 レプリカ (`podManagementPolicy: Parallel`), 必須の podAntiAffinity でノードを分散 (worker1-3. control-plane と qnap-vm は taint で除外), uid 1001 の非 root 実行, ルートファイルシステム読み取り専用, PVC `data` (longhorn 1Gi) を `/var/lib/etcd` にマウント (データは `/var/lib/etcd/data`) |
+| statefulset.yaml | etcd v3.7.3, 3 レプリカ (`podManagementPolicy: Parallel`), 必須の podAntiAffinity でノードを分散 (worker1-3. control-plane と spark は taint で除外), uid 1001 の非 root 実行, ルートファイルシステム読み取り専用, PVC `data` (longhorn 1Gi) を `/var/lib/etcd` にマウント (データは `/var/lib/etcd/data`) |
 | service.yaml | `etcd` (2379, external-dns と coredns の接続先 `http://etcd:2379`. Ready なメンバーに振り分け), `etcd-headless` (2379/2380, `publishNotReadyAddresses`. メンバー名 `etcd-N.etcd-headless` の解決用) |
 | pdb.yaml | `maxUnavailable: 1` (ドレインで同時に止まるのは1台まで) |
 | kustomization.yaml | namespace と共通ラベル |

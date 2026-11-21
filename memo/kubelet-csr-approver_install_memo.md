@@ -8,7 +8,7 @@
 - `kubectl logs` / `exec` (`remote error: tls: internal error`)
 - metrics-server (`kubectl top node` が `nodemetrics ... not found`)
 
-2026-11 に qnap-vm を追加した際, CSR が Pending のまま 6 日間放置され上記の状態になっていた (手動承認で解消).
+2026-11 に qnap-vm (QNAP 上の VM. 2026-11-22 に廃止) を追加した際, CSR が Pending のまま 6 日間放置され上記の状態になっていた (手動承認で解消).
 証明書は約 1 年ごとにローテーションされ, そのたびに承認が必要になるため kubelet-csr-approver で自動化する.
 
 ## 構成
@@ -18,7 +18,7 @@ deploy/kubelet-csr-approver/values/values.yaml  # values
 ```
 
 承認条件 (values.yaml):
-- `providerRegex: ^(master[0-9]+|worker[0-9]+|qnap-vm)$` : ノード名 (DNS SAN)
+- `providerRegex: ^(master[0-9]+|worker[0-9]+|spark[0-9]+)$` : ノード名 (DNS SAN)
 - `providerIpPrefixes: [192.168.1.0/24]` : IP SAN
 - `bypassDnsResolution: true` : ノードのショート名はクラスタ内 DNS で解決できないため無効化
 - `skipDenyStep: true` : 条件外の CSR は deny せず無視 (手動承認できるように残す)

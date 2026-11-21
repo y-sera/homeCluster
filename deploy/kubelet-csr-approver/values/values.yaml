@@ -3,13 +3,13 @@
 #           IP SAN が providerIpPrefixes 内.
 
 # 許可するノード名 (DNS SAN)
-providerRegex: ^(master[0-9]+|worker[0-9]+|spark[0-9]+|qnap-vm)$
+providerRegex: ^(master[0-9]+|worker[0-9]+|spark[0-9]+)$
 
 # 許可する IP SAN の範囲 (ノードの InternalIP)
 providerIpPrefixes:
   - 192.168.1.0/24
 
-# ノードのショート名 (qnap-vm 等) はクラスタ内 DNS で解決できないため DNS 解決チェックを無効化する.
+# ノードのショート名 (worker1 等) はクラスタ内 DNS で解決できないため DNS 解決チェックを無効化する.
 # providerRegex と providerIpPrefixes で制限する.
 bypassDnsResolution: true
 

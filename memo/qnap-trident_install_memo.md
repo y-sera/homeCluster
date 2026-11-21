@@ -95,7 +95,7 @@ blacklist_exceptions {
 | sdg | SYNOLOGY / Storage | synology-csi(iSCSI) | 対象外 |
 | sdh | QNAP / iSCSI Storage | qnap-iscsi | **対象** |
 
-OS ディスクが virtio (`/dev/vda`) の VM (qnap-vm など) では, virtio ディスクはベンダーが `0x1af4`, モデル名が空のため,
+OS ディスクが virtio (`/dev/vda`) の VM (QNAP の Virtualization Station の VM など) では, virtio ディスクはベンダーが `0x1af4`, モデル名が空のため,
 ベンダー名の指定で確実に除外できるとは限らない. `blacklist` に devnode を追加して明示的に除外する
 (QNAP の LUN は sd デバイスのため, この devnode の指定には一致しない).
 ```

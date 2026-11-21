@@ -21,7 +21,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
-      # メンバーは別々のノードに置く (worker1-3。control-plane と qnap-vm は taint で除外される)
+      # メンバーは別々のノードに置く (worker1-3。control-plane と spark は taint で除外される)
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
