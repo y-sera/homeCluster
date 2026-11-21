@@ -68,7 +68,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 ### 構成要素
 | 要素 | 配置 | 内容 |
 |---|---|---|
-| RustFS | worker (初回のデータ移行の間だけ qnap-vm に固定) | 単ノード単ディスク (standalone). データは qnap-iscsi の PVC (18Ti, シン). 冗長化は QNAP の RAID |
+| RustFS | worker (ノードは固定しない) | 単ノード単ディスク (standalone). データは qnap-iscsi の PVC (18Ti, シン). 冗長化は QNAP の RAID |
 | Polaris + PostgreSQL (CNPG) | worker | Iceberg REST カタログ. catalog `arxiv`, `stsUnavailable: true`, `pathStyleAccess: true` |
 | Trino | worker | Iceberg コネクタ (REST カタログ). 分析 SQL と API の裏側 |
 | OpenSearch | search1 (NUC) | 単一ノード. データはローカル NVMe の PV. 論文の索引 (314 万件, 埋め込み付き), 本文チャンクの索引 (BM25). スナップショットを RustFS に取る |
@@ -98,8 +98,9 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 容量: QNAP の空き 22TB に RustFS (約 15TB) を置き, 検証後に SMB の PVC (約 15TB) を削除する. Synology (約 10TB) は作業領域として使う
 - 索引系 (metadata, versions, files): 書き直して Iceberg テーブルにする. 識別キー (paper_id / (paper_id, version)) を設け MERGE 可能にし, 投稿月やカテゴリで分割する
 - テキスト・中身系 (paper_text, latex, source, pdf, ps): parquet を RustFS にコピーし `add_files` で登録する (書き直さない). paper_id 順のため統計で読み飛ばせる
-- コピーは qnap-vm 上の Pod で行い, QNAP の近くで処理する (RustFS も移行の間は qnap-vm に固定し, データが LAN を往復しないようにする)
-- 移行後は RustFS を worker に移し (values の nodeSelector と tolerations を削除), qnap-vm を廃止する
+- コピー先: 中身系は `s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/<元のファイル名>` (catalog arxiv の既定の場所の下), 索引系と README / SHA256SUMS は `s3://arxiv-raw/hf/arxiv-complete/<元のパス>`
+- コピーは rclone の Job (`deploy/sciense-systems/manifests/arxiv-migrate-copy-job.yaml`) で, RustFS と同じ worker で行う. 確認は SHA256SUMS との照合 (`arxiv-migrate-verify-job.yaml`)
+- qnap-vm (QNAP 上の VM) での実行は VM の CPU が上限になり約 49MB/s だったため不採用. worker は 1GbE の送受信を両方使い約 100MB/s (2026-11-21 に測定)
 
 ### 5.2 最新化 (必須)
 | 対象 | 取得元 | 頻度 | 処理 |
@@ -247,12 +248,13 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 ## 6. 後続タスク (進め方)
 | 手順 | 内容 | 状態 |
 |---|---|---|
-| 1 | RustFS を構築 (移行の間は qnap-vm) | 完了 (2026-11-21) |
+| 1 | RustFS を構築 | 完了 (2026-11-21) |
+| 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 実行中 (2026-11-21 開始) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 未着手 |
 | 3 | Trino (`mcp_reader` の制限を含む) | 未着手 |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | 未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
-| 5 | データ移行 (案 B) | 未着手 |
+| 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 未着手 |
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
@@ -280,8 +282,13 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] 確認: `aws s3 ls`, qnap-vm で `/dev/mapper/mpatha` (QNAP iSCSI Storage 18T) が /data にマウントされていること
 - [ ] 確認: qnap-vm で `sudo multipath -ll` が `features='1 queue_if_no_path'` であること, コンソール (port-forward)
 
-### 移行後: qnap-vm の廃止
-- [ ] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
+### 手順 5a: コピーと確認
+- [ ] コピーの Job (arxiv-migrate-copy) を完了させる
+- [ ] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する
+- [ ] SMB の PVC (arxiv-datasets) の削除は手順 5b の検証後
+
+### qnap-vm の廃止
+- [x] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
 - [ ] kubelet-csr-approver の `providerRegex` から qnap-vm を削除する. external-dns の etcd のコメントとメモを直す
 - [ ] `kubectl drain qnap-vm --ignore-daemonsets` → `kubectl delete node qnap-vm` → qnap-vm で `kubeadm reset` → QNAP で VM を削除
 - [ ] QNAP の iSCSI 設定から qnap-vm の initiator を削除する
