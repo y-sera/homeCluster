@@ -1,0 +1,95 @@
+# Trino の動作確認 Job (Ingress 経由の HTTPS + パスワード認証, Iceberg の読み書き, mcp_reader の権限).
+#   kubectl apply -f deploy/sciense-systems/trino/manifests/smoke-test-job.yaml
+#   kubectl -n science-systems logs job/trino-smoke-test
+# 再実行する場合は Job を削除してから apply する.
+# - 確認用のテーブル iceberg.smoke_test.t と iceberg.arxiv.latex (mcp_reader の content 列の拒否の確認用) を作って削除する.
+#   iceberg.arxiv.latex は本番のテーブル名のため, 手順 5b でテーブルを作った後は実行しないこと
+# - Polaris の purge は無効のため, 削除したテーブルのファイルは RustFS に残る (memo/trino_install_memo.md)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trino-smoke-test
+  namespace: science-systems
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: test
+        image: trinodb/trino:484
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: SERVER
+          value: https://trino.cluster.orenet.net
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: admin-password
+        - name: MCP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: mcp-reader-password
+        command:
+        - bash
+        - -c
+        - |
+          fail=0
+          q() {  # $1=user $2=expect(ok|deny) $3=sql
+            if [ "$1" = admin ]; then export TRINO_PASSWORD="$ADMIN_PASSWORD"; else export TRINO_PASSWORD="$MCP_PASSWORD"; fi
+            out=$(trino --server "$SERVER" --user "$1" --password --output-format TSV --execute "$3" 2>&1); rc=$?
+            if [ "$2" = ok ] && [ $rc -eq 0 ]; then r=OK
+            elif [ "$2" = deny ] && [ $rc -ne 0 ] && echo "$out" | grep -q 'Access Denied'; then r=OK
+            else r=NG; fail=1; fi
+            echo "[$r] ($1, expect $2) $3"; echo "$out" | head -5 | sed 's/^/    /'
+          }
+          echo "=== HTTP (no TLS) with password is refused"
+          export TRINO_PASSWORD="$ADMIN_PASSWORD"
+          if trino --server http://trino.science-systems.svc:8080 --user admin --password --execute 'SELECT 1' >/dev/null 2>&1; then echo "[NG] accepted over HTTP"; fail=1; else echo "[OK] refused over HTTP"; fi
+          echo "=== wrong password"
+          export TRINO_PASSWORD=wrong
+          if trino --server "$SERVER" --user admin --password --execute 'SELECT 1' >/dev/null 2>&1; then echo "[NG] wrong password accepted"; fail=1; else echo "[OK] wrong password refused"; fi
+
+          echo "=== admin: read / write"
+          q admin ok "SHOW SCHEMAS FROM iceberg"
+          q admin ok "CREATE SCHEMA IF NOT EXISTS iceberg.smoke_test"
+          q admin ok "CREATE TABLE iceberg.smoke_test.t (id bigint, s varchar)"
+          q admin ok "INSERT INTO iceberg.smoke_test.t VALUES (1, 'a'), (2, 'b')"
+          q admin ok "SELECT count(*), sum(id) FROM iceberg.smoke_test.t"
+          q admin ok "SELECT file_path FROM iceberg.smoke_test.\"t\$files\""
+          q admin ok "CREATE TABLE iceberg.arxiv.latex (paper_id varchar, content varbinary)"
+          q admin ok "INSERT INTO iceberg.arxiv.latex VALUES ('0704.0001', X'00')"
+
+          echo "=== mcp_reader"
+          q mcp_reader ok   "SHOW SCHEMAS FROM iceberg"
+          q mcp_reader ok   "SELECT paper_id FROM iceberg.arxiv.latex"
+          q mcp_reader deny "SELECT content FROM iceberg.arxiv.latex"
+          q mcp_reader deny "SELECT * FROM iceberg.arxiv.latex"
+          q mcp_reader deny "INSERT INTO iceberg.arxiv.latex VALUES ('x', X'00')"
+          q mcp_reader deny "SELECT * FROM iceberg.smoke_test.t"
+          q mcp_reader deny "CREATE TABLE iceberg.arxiv.x (id bigint)"
+
+          echo "=== cleanup (admin)"
+          q admin ok "DROP TABLE iceberg.arxiv.latex"
+          q admin ok "DROP TABLE iceberg.smoke_test.t"
+          q admin ok "DROP SCHEMA iceberg.smoke_test"
+          q admin ok "SHOW TABLES FROM iceberg.arxiv"
+          [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
