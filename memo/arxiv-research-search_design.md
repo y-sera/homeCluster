@@ -252,7 +252,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 1 | RustFS を構築 | 完了 (2026-11-21) |
 | 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 実行中 (2026-11-21 開始) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
-| 3 | Trino (`mcp_reader` の制限を含む) | 未着手 |
+| 3 | Trino (`mcp_reader` の制限を含む) | 完了 (2026-11-22. `memo/trino_install_memo.md`) |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | 未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
 | 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 未着手 |
@@ -299,6 +299,14 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] realm POLARIS の初期化, Polaris 1.9.0 (ArgoCD science-polaris)
 - [x] カタログ arxiv (stsUnavailable: クライアントは各自の RustFS の認証情報を使う), 名前空間 arxiv, テーブル作成の確認
 - [ ] PostgreSQL のバックアップ (任意. 目録は metadata.json から登録し直せる)
+
+### 手順 3: Trino
+- [x] Trino 484 (ArgoCD science-trino, coordinator 1 台が worker を兼ねる), カタログ iceberg (Polaris の principal trino, RustFS のユーザー trino)
+- [x] パスワード認証 (admin / mcp_reader) を Ingress https://trino.cluster.orenet.net の TLS で受ける
+- [x] mcp_reader: iceberg.arxiv の読み取りのみ, pdf / source / ps / latex の content 列は拒否 (動作確認の Job で確認)
+- [x] Polaris の purge は無効のまま (DROP TABLE は失敗する. add_files で登録するコピー済みの parquet を守るため). 削除は unregister_table
+- [ ] mcp_reader の上限: resource groups (同時実行数, メモリ), `query_max_execution_time`, `query_max_scan_physical_bytes` (手順 8 の MCP の前に)
+- [ ] メトリクス (ServiceMonitor. 収集用のユーザーが必要)
 
 ### 手順 4: 検索ノード search1
 - [ ] NUC のメモリを 64GB にする
