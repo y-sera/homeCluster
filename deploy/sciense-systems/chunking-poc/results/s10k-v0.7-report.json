@@ -1,0 +1,196 @@
+{
+ "papers": 9868,
+ "wall_s": 267,
+ "workers": 4,
+ "errors": {},
+ "normalize_ok_rate": 0.9941,
+ "empty_body(<200 chars)": 58,
+ "empty_breakdown": {
+  "auto-ignore": 38,
+  "includepdf": 12,
+  "text<1000": 50,
+  "other": 8
+ },
+ "section_extract_rate (src has \\section)": 0.999,
+ "papers_without_section_cmd": 521,
+ "sections/paper": {
+  "mean": 17.2,
+  "p50": 14,
+  "p95": 39
+ },
+ "chunks/paper": {
+  "mean": 32.6,
+  "p50": 26,
+  "p95": 76
+ },
+ "tokens/chunk": {
+  "mean": 483.6,
+  "p5": 57,
+  "p50": 534,
+  "p95": 807,
+  "p99": 928
+ },
+ "tokens/paper(chunks)": {
+  "mean": 15784.4,
+  "p50": 11562,
+  "p95": 41009
+ },
+ "chunk_size_buckets": {
+  "100-499": "120359 (37.6%)",
+  "500-800": "151670 (47.4%)",
+  "801-1000": "18727 (5.8%)",
+  "<100": "29384 (9.2%)",
+  ">1000": "19 (0.0%)"
+ },
+ "content_type": {
+  "text": 283488,
+  "table": 31955,
+  "code": 4716
+ },
+ "tables/paper": {
+  "mean": 4.4,
+  "p50": 2,
+  "p95": 15
+ },
+ "chunk_section_type": {
+  "other": 90770,
+  "method": 64935,
+  "experiment": 45616,
+  "appendix": 30793,
+  "result": 28886,
+  "intro": 19773,
+  "conclusion": 11214,
+  "discussion": 9423,
+  "related": 7871,
+  "front": 5440,
+  "body": 5438
+ },
+ "dup_chunk_rate": "0.33% (1045 chunks in 373 groups)",
+ "has_abstract_env": 0.886,
+ "has_thebibliography": 0.882,
+ "body/raw chars": {
+  "mean": 0.7,
+  "p5": 0.46715782113863247,
+  "p50": 0.7243660903685304,
+  "p95": 0.8827020578586341
+ },
+ "unknown_cmds/1k chars": {
+  "mean": 2.2,
+  "p50": 0.27746947835738067,
+  "p95": 13.23653900418131
+ },
+ "prog_dropped": {
+  "papers": 2977,
+  "chars_share": 0.0025
+ },
+ "t_paper_s": {
+  "mean": 0.1,
+  "p50": 0.08310387516394258,
+  "p95": 0.24667687993496656,
+  "p99": 0.45948194712400436
+ },
+ "t_paper_max_s": 2.46,
+ "chunk_text_bytes(utf8)": 526078297,
+ "extrapolation": {
+  "population_papers": 2856227,
+  "weighted_normalize_ok_rate": 0.9941,
+  "weighted_chunks/paper(all papers)": 32.0,
+  "est_total_chunks": 91384472,
+  "est_total_tokens": 47848044636,
+  "est_chunk_text_GB": 155.1,
+  "est_cpu_hours(1 core)": 83.2
+ },
+ "by_stratum": {
+  "astro-ph": {
+   "n": 824,
+   "ok": 0.994,
+   "sec_extract": 0.997,
+   "chunks/paper_p50": 23,
+   "tables/paper": 2.6
+  },
+  "cond-mat": {
+   "n": 772,
+   "ok": 0.999,
+   "sec_extract": 0.997,
+   "chunks/paper_p50": 16,
+   "tables/paper": 2.1
+  },
+  "cs.AI": {
+   "n": 797,
+   "ok": 0.997,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 31,
+   "tables/paper": 5.4
+  },
+  "cs.CL": {
+   "n": 786,
+   "ok": 0.996,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 30,
+   "tables/paper": 6.8
+  },
+  "cs.CV": {
+   "n": 691,
+   "ok": 0.986,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 28,
+   "tables/paper": 6.3
+  },
+  "cs.LG": {
+   "n": 814,
+   "ok": 0.995,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 35,
+   "tables/paper": 5.9
+  },
+  "cs.other": {
+   "n": 744,
+   "ok": 0.991,
+   "sec_extract": 0.999,
+   "chunks/paper_p50": 29,
+   "tables/paper": 3.7
+  },
+  "hep": {
+   "n": 666,
+   "ok": 0.998,
+   "sec_extract": 0.998,
+   "chunks/paper_p50": 21,
+   "tables/paper": 4.9
+  },
+  "math": {
+   "n": 795,
+   "ok": 0.992,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 34,
+   "tables/paper": 4.6
+  },
+  "other": {
+   "n": 828,
+   "ok": 0.995,
+   "sec_extract": 0.996,
+   "chunks/paper_p50": 22,
+   "tables/paper": 3.6
+  },
+  "physics": {
+   "n": 691,
+   "ok": 0.994,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 19,
+   "tables/paper": 2.6
+  },
+  "quant-ph": {
+   "n": 651,
+   "ok": 0.997,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 21,
+   "tables/paper": 2.9
+  },
+  "stat": {
+   "n": 809,
+   "ok": 0.989,
+   "sec_extract": 1.0,
+   "chunks/paper_p50": 37,
+   "tables/paper": 5.1
+  }
+ }
+}

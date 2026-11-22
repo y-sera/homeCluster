@@ -1,0 +1,76 @@
+# チャンク作成の検証 (設計メモ 5.7) の作業用 Pod と PVC. 手動で apply する (検証が終わったら削除する):
+#   kubectl apply -f deploy/sciense-systems/chunking-poc/dev-pod.yaml
+#   kubectl -n science-systems exec -it chunking-poc -- bash
+# - 元データ (PVC arxiv-datasets, HF のリポジトリ構成) を /src に読み取り専用でマウントする
+# - 作業領域 /work (Longhorn): Python の venv (/work/venv), 抽出したサンプル, 加工結果, 統計
+# - コピーの Job (arxiv-migrate-copy) と RustFS がいる worker2 を避ける (SMB の読み込みとネットワークの競合を減らす)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chunking-poc-work
+  namespace: science-systems
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chunking-poc
+  namespace: science-systems
+  labels:
+    app.kubernetes.io/name: chunking-poc
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values: ["worker1", "worker3"]
+  containers:
+  - name: dev
+    image: python:3.13.9-slim-trixie
+    command: ["sleep", "infinity"]
+    workingDir: /work
+    env:
+    - name: HOME
+      value: /work
+    - name: HF_HOME
+      value: /work/hf
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+    resources:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+      limits:
+        memory: 12Gi
+    volumeMounts:
+    - name: src
+      mountPath: /src
+      readOnly: true
+    - name: work
+      mountPath: /work
+  volumes:
+  - name: src
+    persistentVolumeClaim:
+      claimName: arxiv-datasets
+      readOnly: true
+  - name: work
+    persistentVolumeClaim:
+      claimName: chunking-poc-work
