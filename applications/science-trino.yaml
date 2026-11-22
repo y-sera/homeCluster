@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: science-trino
+  namespace: argocd
+spec:
+  project: default
+  sources:
+  - repoURL: https://gitlab.cluster.orenet.net/y-sera/homecluster.git
+    ref: configs
+    targetRevision: HEAD
+  - repoURL: https://trinodb.github.io/charts
+    helm:
+      valueFiles:
+      - $configs/deploy/sciense-systems/trino/values/values.yaml
+      releaseName: trino
+    chart: trino
+    targetRevision: 1.45.0
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: science-systems

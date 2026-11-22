@@ -1,0 +1,177 @@
+# Polaris に Trino 用の principal (trino) と権限を作り, その認証情報を Secret trino-polaris に保存する Job.
+# Polaris のサーバーとカタログ arxiv ができてから, Trino の Application を同期する前に手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/trino/manifests/polaris-principal-job.yaml
+#   kubectl -n science-systems logs job/polaris-principal-trino
+# 冪等. 再実行する場合は Job を削除してから apply する.
+#
+# 権限: principal trino → principal role trino → カタログ arxiv の catalog role trino_rw (CATALOG_MANAGE_CONTENT:
+#   名前空間・テーブルの作成, 変更, 削除とデータの読み書き. カタログ自体の設定と権限の管理はできない)
+#
+# 認証情報 (client_id / client_secret) は Polaris が払い出すため, Vault ではなくこの Job が Secret に書く
+# (キー credential = <client_id>:<client_secret>. Trino の iceberg.rest-catalog.oauth2.credential).
+# - principal があり Secret もある: 何もしない (Secret の認証情報でトークンが取れることだけ確認する)
+# - principal がない: 作成し, 返された認証情報を Secret に書く
+# - principal はあるが Secret がない: 認証情報を作り直し (reset) Secret に書く
+# 認証情報を作り直したい場合は Secret を削除して再実行し, Trino を再起動する.
+# 認証情報はログに出さない
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: polaris-principal-trino
+  namespace: science-systems
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: polaris-principal-trino
+  namespace: science-systems
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["trino-polaris"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: polaris-principal-trino
+  namespace: science-systems
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: polaris-principal-trino
+subjects:
+- kind: ServiceAccount
+  name: polaris-principal-trino
+  namespace: science-systems
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: polaris-principal-trino
+  namespace: science-systems
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      # 失敗した Pod とログを残す
+      restartPolicy: Never
+      serviceAccountName: polaris-principal-trino
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: setup
+        image: curlimages/curl:8.22.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: BASE
+          value: http://polaris.science-systems.svc:8181
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: polaris-root
+              key: client-id
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: polaris-root
+              key: client-secret
+        command:
+        - sh
+        - -ec
+        - |
+          cd /tmp
+          M=/api/management/v1
+          token() {  # $1=client_id $2=client_secret
+            curl -sf "$BASE/api/catalog/v1/oauth/tokens" \
+              -d grant_type=client_credentials --data-urlencode client_id="$1" --data-urlencode client_secret="$2" \
+              -d scope=PRINCIPAL_ROLE:ALL | sed -n 's/.*"access_token" *: *"\([^"]*\)".*/\1/p'
+          }
+          TOKEN=$(token "$CLIENT_ID" "$CLIENT_SECRET")
+          [ -n "$TOKEN" ] || { echo "NG: failed to get root token"; exit 1; }
+          # $1=method $2=path $3=body(JSON or empty) $4=accepted codes. 応答は out.json (認証情報を含みうるため表示しない)
+          call() {
+            if [ -n "$3" ]; then
+              code=$(curl -s -o out.json -w '%{http_code}' -X "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' "$BASE$2" --data "$3")
+            else
+              code=$(curl -s -o out.json -w '%{http_code}' -X "$1" -H "Authorization: Bearer $TOKEN" "$BASE$2")
+            fi
+            echo "$1 $2 -> $code"
+            case " $4 " in *" $code "*) ;; *) echo "NG: unexpected status"; sed 's/"clientSecret" *: *"[^"]*"/"clientSecret":"***"/' out.json; echo; exit 1;; esac
+          }
+          echo "=== roles"
+          call POST $M/principal-roles '{"principalRole":{"name":"trino"}}' "201 409"
+          call POST $M/catalogs/arxiv/catalog-roles '{"catalogRole":{"name":"trino_rw"}}' "201 409"
+          call PUT $M/catalogs/arxiv/catalog-roles/trino_rw/grants '{"grant":{"type":"catalog","privilege":"CATALOG_MANAGE_CONTENT"}}' "201 409"
+          call PUT $M/principal-roles/trino/catalog-roles/arxiv '{"catalogRole":{"name":"trino_rw"}}' "201 409"
+
+          echo "=== Secret trino-polaris"
+          SA=/var/run/secrets/kubernetes.io/serviceaccount
+          K=https://kubernetes.default.svc/api/v1/namespaces/$(cat $SA/namespace)/secrets
+          kube() {  # $1=method $2=url $3=body file(optional)
+            curl -s -o kube.json -w '%{http_code}' --cacert $SA/ca.crt -H "Authorization: Bearer $(cat $SA/token)" \
+              -H 'Content-Type: application/json' -X "$1" "$2" ${3:+--data @"$3"}
+          }
+          scode=$(kube GET "$K/trino-polaris"); echo "GET secret trino-polaris -> $scode"
+          case "$scode" in 200|404) ;; *) echo "NG: cannot read secret"; exit 1;; esac
+
+          echo "=== principal trino"
+          call GET $M/principals/trino "" "200 404"
+          if [ "$code" = 404 ]; then
+            call POST $M/principals '{"principal":{"name":"trino"},"credentialRotationRequired":false}' "201"
+            mv out.json cred.json; NEW=1
+          elif [ "$scode" = 404 ]; then
+            call POST $M/principals/trino/reset "" "200"
+            mv out.json cred.json; NEW=1
+          else
+            NEW=0
+            echo "principal and secret exist: keep credentials"
+          fi
+          call PUT $M/principals/trino/principal-roles '{"principalRole":{"name":"trino"}}' "201 409"
+
+          if [ "$NEW" = 1 ]; then
+            echo "=== write Secret trino-polaris"
+            ID=$(sed -n 's/.*"clientId" *: *"\([^"]*\)".*/\1/p' cred.json)
+            SECRET=$(sed -n 's/.*"clientSecret" *: *"\([^"]*\)".*/\1/p' cred.json)
+            [ -n "$ID" ] && [ -n "$SECRET" ] || { echo "NG: no credentials in response"; exit 1; }
+            printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"trino-polaris","labels":{"app.kubernetes.io/part-of":"trino"}},"type":"Opaque","stringData":{"credential":"%s:%s"}}' \
+              "$ID" "$SECRET" > secret.json
+            rm -f cred.json
+            if [ "$scode" = 404 ]; then wcode=$(kube POST "$K" secret.json); else wcode=$(kube PUT "$K/trino-polaris" secret.json); fi
+            rm -f secret.json kube.json
+            echo "write secret -> $wcode"
+            case "$wcode" in 200|201) ;; *) echo "NG: cannot write secret"; exit 1;; esac
+            unset SECRET
+          fi
+
+          echo "=== check: token as trino (credentials from Secret trino-polaris)"
+          [ "$(kube GET "$K/trino-polaris")" = 200 ] || { echo "NG: cannot read secret"; exit 1; }
+          CRED=$(sed -n 's/.*"credential" *: *"\([^"]*\)".*/\1/p' kube.json | base64 -d); rm -f kube.json
+          T2=$(token "${CRED%%:*}" "${CRED#*:}"); unset CRED
+          [ -n "$T2" ] || { echo "NG: token as trino failed (delete Secret trino-polaris and re-run to reset)"; exit 1; }
+          code=$(curl -s -o out.json -w '%{http_code}' -H "Authorization: Bearer $T2" "$BASE/api/catalog/v1/arxiv/namespaces")
+          echo "GET /api/catalog/v1/arxiv/namespaces as trino -> $code"; cat out.json; echo
+          [ "$code" = 200 ] || exit 1
+
+          echo "=== roles of trino"
+          call GET $M/principals/trino/principal-roles "" "200"; cat out.json; echo
+          call GET $M/principal-roles/trino/catalog-roles/arxiv "" "200"; cat out.json; echo
+          call GET $M/catalogs/arxiv/catalog-roles/trino_rw/grants "" "200"; cat out.json; echo
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

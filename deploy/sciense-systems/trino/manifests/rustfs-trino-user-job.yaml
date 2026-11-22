@@ -1,0 +1,85 @@
+# RustFS に Trino 用のユーザー (trino) を作り, ポリシー arxiv-warehouse-rw を付ける Job.
+# ポリシーは Polaris 用に作成済みのもの (deploy/sciense-systems/polaris/manifests/rustfs-polaris-user-job.yaml) を使う.
+# trino-storage の Secret (manifests/trino-external-secrets.yaml) が SecretSynced になってから手動で apply する:
+#   kubectl apply -f deploy/sciense-systems/trino/manifests/rustfs-trino-user-job.yaml
+#   kubectl -n science-systems logs job/rustfs-trino-user
+# 再実行する場合は Job を削除してから apply する. 既存のユーザーはそのままにする
+# (パスワードを変える場合はユーザーを削除してから再実行する).
+#
+# - Trino はテーブルのデータと metadata を読み書きし, 削除・最適化で古いファイルを消すため,
+#   arxiv-warehouse の読み書き・削除を許可する. arxiv-raw (移行元の生ファイル) は許可しない
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-trino-user
+  namespace: science-systems
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: setup
+        image: rustfs/rc:v0.1.37
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: ENDPOINT
+          value: http://science-rustfs-svc.science-systems.svc:9000
+        - name: ROOT_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: ROOT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        - name: USER_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: trino-storage
+              key: access-key
+        - name: USER_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: trino-storage
+              key: secret-key
+        command:
+        - sh
+        - -ec
+        - |
+          rc alias set rustfs "$ENDPOINT" "$ROOT_ACCESS_KEY" "$ROOT_SECRET_KEY" >/dev/null
+          rc admin policy info rustfs arxiv-warehouse-rw >/dev/null || { echo "NG: policy arxiv-warehouse-rw not found (run rustfs-polaris-user first)"; exit 1; }
+          if rc admin user info rustfs "$USER_ACCESS_KEY" >/dev/null 2>&1; then
+            echo "exists : user $USER_ACCESS_KEY"
+          else
+            rc admin user add rustfs "$USER_ACCESS_KEY" "$USER_SECRET_KEY"
+            echo "created: user $USER_ACCESS_KEY"
+          fi
+          rc admin policy attach rustfs arxiv-warehouse-rw --user "$USER_ACCESS_KEY" || echo "(attach skipped: already attached?)"
+          echo "--- user info"
+          rc admin user info rustfs "$USER_ACCESS_KEY"
+          echo "--- check as $USER_ACCESS_KEY"
+          rc alias set check "$ENDPOINT" "$USER_ACCESS_KEY" "$USER_SECRET_KEY" >/dev/null
+          echo "arxiv-warehouse (allowed):"; rc object list check/arxiv-warehouse/ | head -5
+          if rc object list check/arxiv-raw/ >/dev/null 2>&1; then echo "NG: arxiv-raw is readable"; exit 1; else echo "OK: arxiv-raw is denied"; fi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

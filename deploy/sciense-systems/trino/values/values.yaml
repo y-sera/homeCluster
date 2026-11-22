@@ -1,0 +1,157 @@
+# science-systems 用 Trino. arXiv の Iceberg テーブル (Polaris のカタログ arxiv) を SQL で検索・加工する.
+# chart の既定値との差分のみ記載する.
+# - カタログ iceberg: Polaris (REST カタログ) の principal trino で目録を操作し, データは RustFS のユーザー trino で直接読み書きする
+#   (Polaris は stsUnavailable のため認証情報の払い出しを行わない)
+# - 最小構成: coordinator 1 台が worker を兼ねる (server.workers: 0). worker の CPU の空きが少ないため
+# - 認証: パスワードファイル (ユーザー admin / mcp_reader). Trino のクライアント (CLI / JDBC / Python) は
+#   パスワード認証に HTTPS を必須とするため, Ingress (https://trino.cluster.orenet.net, Let's Encrypt) で TLS を終端し,
+#   X-Forwarded-Proto を信頼する (http-server.process-forwarded). クラスタ内のクライアントも Ingress を経由する
+# - 認可: ファイルベースのアクセス制御 (accessControl). mcp_reader は読み取りのみで, pdf / source / ps / latex の content 列は読めない
+# - 事前に手動で apply するもの: manifests/trino-external-secrets.yaml, rustfs-trino-user-job.yaml, polaris-principal-job.yaml
+
+server:
+  workers: 0
+  config:
+    authenticationType: PASSWORD
+    query:
+      maxMemory: 3GB
+
+coordinator:
+  jvm:
+    maxHeapSize: 6G
+  config:
+    nodeScheduler:
+      includeCoordinator: true
+    query:
+      maxMemoryPerNode: 3GB
+  resources:
+    requests:
+      cpu: 500m
+      memory: 6Gi
+    limits:
+      memory: 8Gi
+
+additionalConfigProperties:
+# 認証を有効にするとノード間通信の共有鍵が必須 (Secret trino-internal)
+- internal-communication.shared-secret=${ENV:TRINO_SHARED_SECRET}
+# Ingress で TLS を終端するため, X-Forwarded-Proto: https の要求を HTTPS として扱う
+# (HTTP で直接 Service に来た要求ではパスワード認証を受け付けない)
+- http-server.process-forwarded=true
+
+auth:
+  # キー password.db (manifests/trino-external-secrets.yaml)
+  passwordAuthSecret: trino-password
+
+env:
+- name: TRINO_SHARED_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: trino-internal
+      key: shared-secret
+- name: POLARIS_CREDENTIAL
+  valueFrom:
+    secretKeyRef:
+      name: trino-polaris
+      key: credential
+- name: RUSTFS_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trino-storage
+      key: access-key
+- name: RUSTFS_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trino-storage
+      key: secret-key
+
+catalogs:
+  # chart の既定の tpch / tpcds は使わない
+  tpch: null
+  tpcds: null
+  iceberg: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://polaris.science-systems.svc:8181/api/catalog
+    iceberg.rest-catalog.warehouse=arxiv
+    iceberg.rest-catalog.security=OAUTH2
+    iceberg.rest-catalog.oauth2.credential=${ENV:POLARIS_CREDENTIAL}
+    iceberg.rest-catalog.oauth2.scope=PRINCIPAL_ROLE:ALL
+    iceberg.rest-catalog.vended-credentials-enabled=false
+    iceberg.file-format=PARQUET
+    fs.native-s3.enabled=true
+    s3.endpoint=http://science-rustfs-svc.science-systems.svc:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=${ENV:RUSTFS_ACCESS_KEY}
+    s3.aws-secret-key=${ENV:RUSTFS_SECRET_KEY}
+
+# ファイルベースのアクセス制御 (/etc/trino/access-control/rules.json. 60 秒ごとに読み直す).
+# 規則は上から順に評価され, 最初に一致したものが使われる. どれにも一致しなければ拒否する.
+# - admin: すべて (テーブルの作成, add_files などの移行作業)
+# - mcp_reader: カタログ iceberg の名前空間 arxiv の SELECT のみ. pdf / source / ps / latex の content 列
+#   (論文の本体のバイナリ) は拒否する (SELECT * も失敗するため, 列を指定して問い合わせる)
+accessControl:
+  type: configmap
+  refreshPeriod: 60s
+  configFile: rules.json
+  rules:
+    rules.json: |-
+      {
+        "catalogs": [
+          {"user": "admin", "allow": "all"},
+          {"user": "mcp_reader", "catalog": "iceberg", "allow": "read-only"},
+          {"catalog": "system", "allow": "read-only"}
+        ],
+        "schemas": [
+          {"user": "admin", "owner": true},
+          {"user": "mcp_reader", "catalog": "iceberg", "schema": "arxiv", "owner": false}
+        ],
+        "tables": [
+          {"user": "admin", "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP", "GRANT_SELECT"]},
+          {
+            "user": "mcp_reader", "catalog": "iceberg", "schema": "arxiv", "table": "pdf|source|ps|latex",
+            "privileges": ["SELECT"],
+            "columns": [{"name": "content", "allow": false}]
+          },
+          {"user": "mcp_reader", "catalog": "iceberg", "schema": "arxiv", "privileges": ["SELECT"]},
+          {"catalog": "system", "privileges": ["SELECT"]}
+        ],
+        "system_information": [
+          {"user": "admin", "allow": ["read", "write"]}
+        ]
+      }
+
+ingress:
+  enabled: true
+  className: cilium
+  hosts:
+  - host: trino.cluster.orenet.net
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: trino-cert
+    hosts:
+    - trino.cluster.orenet.net
+
+extraManifests:
+- |
+  apiVersion: cert-manager.io/v1
+  kind: Certificate
+  metadata:
+    name: trino
+    namespace: {{ .Release.Namespace }}
+  spec:
+    dnsNames:
+    - trino.cluster.orenet.net
+    duration: 2160h0m0s
+    renewBefore: 360h0m0s
+    issuerRef:
+      group: cert-manager.io
+      kind: ClusterIssuer
+      name: letsencrypt
+    privateKey:
+      rotationPolicy: Always
+      algorithm: RSA
+      size: 2048
+    secretName: trino-cert
