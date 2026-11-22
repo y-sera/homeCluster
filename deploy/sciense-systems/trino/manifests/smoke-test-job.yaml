@@ -1,10 +1,12 @@
 # Trino の動作確認 Job (Ingress 経由の HTTPS + パスワード認証, Iceberg の読み書き, mcp_reader の権限).
 #   kubectl apply -f deploy/sciense-systems/trino/manifests/smoke-test-job.yaml
 #   kubectl -n science-systems logs job/trino-smoke-test
-# 再実行する場合は Job を削除してから apply する.
+# 再実行する場合は Job を削除してから apply する. イメージには grep / sed がないため bash の組み込み機能のみ使う.
 # - 確認用のテーブル iceberg.smoke_test.t と iceberg.arxiv.latex (mcp_reader の content 列の拒否の確認用) を作って削除する.
 #   iceberg.arxiv.latex は本番のテーブル名のため, 手順 5b でテーブルを作った後は実行しないこと
-# - Polaris の purge は無効のため, 削除したテーブルのファイルは RustFS に残る (memo/trino_install_memo.md)
+# - Polaris の purge は無効のため DROP TABLE は失敗する. テーブルは iceberg.system.unregister_table で目録から外し,
+#   RustFS に残るファイル (s3://arxiv-warehouse/smoke_test/, s3://arxiv-warehouse/arxiv/latex-*/) は RustFS の root で削除する
+#   (memo/trino_install_memo.md)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -51,9 +53,10 @@ spec:
             if [ "$1" = admin ]; then export TRINO_PASSWORD="$ADMIN_PASSWORD"; else export TRINO_PASSWORD="$MCP_PASSWORD"; fi
             out=$(trino --server "$SERVER" --user "$1" --password --output-format TSV --execute "$3" 2>&1); rc=$?
             if [ "$2" = ok ] && [ $rc -eq 0 ]; then r=OK
-            elif [ "$2" = deny ] && [ $rc -ne 0 ] && echo "$out" | grep -q 'Access Denied'; then r=OK
+            elif [ "$2" = deny ] && [ $rc -ne 0 ] && [[ "$out" == *"Access Denied"* ]]; then r=OK
+            elif [ "$2" = deny_drop ] && [ $rc -ne 0 ] && [[ "$out" == *"Failed to drop table"* ]]; then r=OK
             else r=NG; fail=1; fi
-            echo "[$r] ($1, expect $2) $3"; echo "$out" | head -5 | sed 's/^/    /'
+            echo "[$r] ($1, expect $2) $3"; n=0; while IFS= read -r l && [ $n -lt 5 ]; do echo "    $l"; n=$((n+1)); done <<< "$out"
           }
           echo "=== HTTP (no TLS) with password is refused"
           export TRINO_PASSWORD="$ADMIN_PASSWORD"
@@ -65,11 +68,11 @@ spec:
           echo "=== admin: read / write"
           q admin ok "SHOW SCHEMAS FROM iceberg"
           q admin ok "CREATE SCHEMA IF NOT EXISTS iceberg.smoke_test"
-          q admin ok "CREATE TABLE iceberg.smoke_test.t (id bigint, s varchar)"
+          q admin ok "CREATE TABLE IF NOT EXISTS iceberg.smoke_test.t (id bigint, s varchar)"
           q admin ok "INSERT INTO iceberg.smoke_test.t VALUES (1, 'a'), (2, 'b')"
           q admin ok "SELECT count(*), sum(id) FROM iceberg.smoke_test.t"
           q admin ok "SELECT file_path FROM iceberg.smoke_test.\"t\$files\""
-          q admin ok "CREATE TABLE iceberg.arxiv.latex (paper_id varchar, content varbinary)"
+          q admin ok "CREATE TABLE IF NOT EXISTS iceberg.arxiv.latex (paper_id varchar, content varbinary)"
           q admin ok "INSERT INTO iceberg.arxiv.latex VALUES ('0704.0001', X'00')"
 
           echo "=== mcp_reader"
@@ -82,8 +85,11 @@ spec:
           q mcp_reader deny "CREATE TABLE iceberg.arxiv.x (id bigint)"
 
           echo "=== cleanup (admin)"
-          q admin ok "DROP TABLE iceberg.arxiv.latex"
-          q admin ok "DROP TABLE iceberg.smoke_test.t"
+          # Polaris の purge は無効のため DROP TABLE は失敗する (コピーした parquet を誤って消さないための安全側の動作)
+          q admin deny_drop "DROP TABLE iceberg.smoke_test.t"
+          # テーブルは目録からの登録解除で消す (ファイルは RustFS に残る)
+          q admin ok "CALL iceberg.system.unregister_table(schema_name => 'arxiv', table_name => 'latex')"
+          q admin ok "CALL iceberg.system.unregister_table(schema_name => 'smoke_test', table_name => 't')"
           q admin ok "DROP SCHEMA iceberg.smoke_test"
           q admin ok "SHOW TABLES FROM iceberg.arxiv"
           [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }

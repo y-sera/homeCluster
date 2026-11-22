@@ -87,7 +87,7 @@ catalogs:
 
 # ファイルベースのアクセス制御 (/etc/trino/access-control/rules.json. 60 秒ごとに読み直す).
 # 規則は上から順に評価され, 最初に一致したものが使われる. どれにも一致しなければ拒否する.
-# - admin: すべて (テーブルの作成, add_files などの移行作業)
+# - admin: すべて (テーブルの作成, add_files / unregister_table などのプロシージャ. procedures で明示的に許可が必要)
 # - mcp_reader: カタログ iceberg の名前空間 arxiv の SELECT のみ. pdf / source / ps / latex の content 列
 #   (論文の本体のバイナリ) は拒否する (SELECT * も失敗するため, 列を指定して問い合わせる)
 accessControl:
@@ -115,6 +115,9 @@ accessControl:
           },
           {"user": "mcp_reader", "catalog": "iceberg", "schema": "arxiv", "privileges": ["SELECT"]},
           {"catalog": "system", "privileges": ["SELECT"]}
+        ],
+        "procedures": [
+          {"user": "admin", "privileges": ["EXECUTE"]}
         ],
         "system_information": [
           {"user": "admin", "allow": ["read", "write"]}
