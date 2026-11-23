@@ -1,0 +1,90 @@
+# 手順 5b (中身系): コピー済みの parquet を書き直さずに Iceberg テーブルとして登録する Job.
+#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-iceberg-content-job.yaml
+#   kubectl -n science-systems logs -f job/arxiv-iceberg-content
+# 成功すると "ALL OK" を出力する. 再実行する場合は Job を削除してから apply する (登録済みのテーブルは飛ばすため何度実行してもよい).
+#
+# - テーブル: iceberg.arxiv.{paper_text,latex,ps,source,pdf}. データは s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/ (手順 5a のコピー)
+# - add_files は parquet のフッターだけを読む (書き込みはメタデータのみ). 3,736 ファイルで 30〜45 分程度
+# - テーブルの場所は s3://arxiv-warehouse/arxiv/<テーブル>/iceberg. Trino は既にファイルがある場所にテーブルを作れないため,
+#   コピー済みの data/hf/ の隣にする (データファイルはテーブルの場所の外でもよい). Polaris は名前空間のパスの下しか許可しない
+# - parquet は Iceberg のフィールド ID を持たない. add_files が schema.name-mapping.default (列名で対応付け) を設定する
+# - 登録後に OPTIMIZE / expire_snapshots を実行すると, 書き直された元の parquet (コピーしたデータ) が削除される. 実行しないこと
+# - Trino のカタログで iceberg.add-files-procedure.enabled=true が必要 (trino/values/values.yaml)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arxiv-iceberg-content
+  namespace: science-systems
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: register
+        image: trinodb/trino:484
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: SERVER
+          value: https://trino.cluster.orenet.net
+        - name: TRINO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: admin-password
+        # イメージには grep / sed がないため bash の組み込み機能のみ使う
+        command:
+        - bash
+        - -c
+        - |
+          set -o pipefail
+          fail=0
+          q() { trino --server "$SERVER" --user admin --password --output-format TSV --execute "$1"; }
+          # 列は元の parquet と同じ名前・順序 (large_string / large_binary は Iceberg の string / binary)
+          BLOB="paper_id varchar, version integer, kind varchar, source varchar, path varchar, size bigint, sha256 varchar, content varbinary"
+          declare -A COLS=(
+            [paper_text]="paper_id varchar, text varchar, main_file varchar, resolution varchar, n_tex_files integer, n_files_used integer, n_unused_files integer, text_encoding varchar, text_sha256 varchar, title varchar, abstract varchar, primary_category varchar, license varchar"
+            [latex]="paper_id varchar, path varchar, ext varchar, size bigint, sha256 varchar, content varbinary"
+            [ps]="$BLOB" [source]="$BLOB" [pdf]="$BLOB"
+          )
+          # 期待値 (HF の parquet のフッターの行数の合計, 2026-11-23 に SMB の PVC で集計)
+          declare -A FILES=([paper_text]=50 [latex]=80 [ps]=134 [source]=1586 [pdf]=1886)
+          declare -A ROWS=([paper_text]=2856227 [latex]=12348082 [ps]=2237839 [source]=47373604 [pdf]=4973956)
+
+          for t in paper_text latex ps source pdf; do
+            echo "=== $(date -u +%FT%TZ) $t"
+            q "CREATE TABLE IF NOT EXISTS iceberg.arxiv.$t (${COLS[$t]})
+               WITH (location = 's3://arxiv-warehouse/arxiv/$t/iceberg', sorted_by = ARRAY['paper_id'])" || { fail=1; continue; }
+            n=$(q "SELECT count(*) FROM iceberg.arxiv.\"$t\$files\"") || { fail=1; continue; }
+            if [ "$n" = 0 ]; then
+              q "ALTER TABLE iceberg.arxiv.$t EXECUTE add_files(location => 's3://arxiv-warehouse/arxiv/$t/data/hf/', format => 'PARQUET')" || { fail=1; continue; }
+            else
+              echo "already registered ($n files), skip add_files"
+            fi
+            r=$(q "SELECT count(*), sum(record_count) FROM iceberg.arxiv.\"$t\$files\"") || { fail=1; continue; }
+            IFS=$'\t' read -r nf nr <<< "$r"
+            c=$(q "SELECT count(*) FROM iceberg.arxiv.$t") || { fail=1; continue; }
+            if [ "$nf" = "${FILES[$t]}" ] && [ "$nr" = "${ROWS[$t]}" ] && [ "$c" = "${ROWS[$t]}" ]; then
+              echo "[OK] $t files=$nf rows=$c"
+            else
+              echo "[NG] $t files=$nf (expect ${FILES[$t]}) rows(files)=$nr rows(count)=$c (expect ${ROWS[$t]})"; fail=1
+            fi
+          done
+          echo "=== $(date -u +%FT%TZ) done"
+          q "SHOW TABLES FROM iceberg.arxiv"
+          [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi

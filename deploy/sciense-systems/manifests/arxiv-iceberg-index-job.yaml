@@ -1,0 +1,171 @@
+# 手順 5b (索引系): metadata / versions / files を Iceberg テーブルに書き直す Job.
+#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-iceberg-index-job.yaml
+#   kubectl -n science-systems logs -f job/arxiv-iceberg-index -c stage   # 1. 作業用の場所へコピー
+#   kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build   # 2. テーブル作成
+# 成功すると "ALL OK" を出力する. 再実行する場合は Job を削除してから apply する (作成済みのテーブルは飛ばす).
+#
+# 流れ:
+#   1. (stage) 元の parquet (s3://arxiv-raw/hf/arxiv-complete/{metadata,versions,files}/, 約 4GB) を
+#      s3://arxiv-warehouse/arxiv_staging/<テーブル>/data/hf/ へコピーする (Trino の RustFS のユーザーは arxiv-raw を読めないため)
+#   2. (build) iceberg.arxiv_staging.<テーブル> として add_files で登録し, CTAS で iceberg.arxiv.<テーブル> に書き直す
+#      - metadata: 投稿年 (first_version_date の年) で分割, paper_id で並べる (1 論文 1 行. キー paper_id)
+#      - versions: 分割なし, (paper_id, version) で並べる (キー (paper_id, version))
+#      - files:    分割なし, (paper_id, version, path) で並べる
+#      キーは Iceberg の identifier fields としては設定しない (Trino では設定できない. MERGE は ON 句で指定する)
+#   3. 行数を元の parquet の行数と照合する
+# - 作成後の作業用のテーブルとファイルの削除は手動 (memo/arxiv_iceberg_tables_memo.md)
+# - 書き込みを伴うため, 確認の Job (arxiv-migrate-verify) など RustFS を使う大きな処理が終わってから実行する
+#   (iSCSI が混んでいると RustFS の書き込みが 1 件数秒かかり, CTAS が HIVE_WRITER_CLOSE_ERROR で失敗することがある)
+# - CTAS が失敗した場合, 書きかけのファイルが s3://arxiv-warehouse/arxiv/<テーブル>-<uuid>/ に残る (再実行は別の uuid の場所に作る)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arxiv-iceberg-index
+  namespace: science-systems
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: stage
+        image: rclone/rclone:1.75.2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: RCLONE_CONFIG
+          value: /tmp/rclone.conf
+        - name: RCLONE_CONFIG_DST_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_DST_PROVIDER
+          value: Other
+        - name: RCLONE_CONFIG_DST_ENDPOINT
+          value: http://science-rustfs-svc.science-systems.svc:9000
+        - name: RCLONE_CONFIG_DST_REGION
+          value: us-east-1
+        - name: RCLONE_CONFIG_DST_FORCE_PATH_STYLE
+          value: "true"
+        # arxiv-raw と arxiv-warehouse の両方を使うため RustFS の root
+        - name: RCLONE_CONFIG_DST_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: RCLONE_CONFIG_DST_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        command:
+        - sh
+        - -ec
+        - |
+          for t in metadata versions files; do
+            echo "=== $(date -u +%FT%TZ) $t"
+            rclone copy --s3-disable-checksum "dst:arxiv-raw/hf/arxiv-complete/$t" "dst:arxiv-warehouse/arxiv_staging/$t/data/hf"
+            rclone size "dst:arxiv-warehouse/arxiv_staging/$t/data/hf"
+          done
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      containers:
+      - name: build
+        image: trinodb/trino:484
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: SERVER
+          value: https://trino.cluster.orenet.net
+        - name: TRINO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: admin-password
+        # イメージには grep / sed がないため bash の組み込み機能のみ使う
+        command:
+        - bash
+        - -c
+        - |
+          set -o pipefail
+          fail=0
+          q() { trino --server "$SERVER" --user admin --password --output-format TSV --execute "$1"; }
+          exists() { [ "$(q "SELECT count(*) FROM iceberg.information_schema.tables WHERE table_schema = '$1' AND table_name = '$2'")" = 1 ]; }
+          # 元の parquet と同じ名前・順序 (timestamp[ms] は timestamp(6) で読む)
+          declare -A COLS=(
+            [metadata]="paper_id varchar, title varchar, authors varchar, abstract varchar, categories varchar, primary_category varchar, submitter varchar, license varchar, doi varchar, journal_ref varchar, comments varchar, report_no varchar, msc_class varchar, acm_class varchar, proxy varchar, n_versions integer, first_version_date timestamp(6), latest_version_date timestamp(6), oai_datestamp varchar, oai_sets array(varchar), arxiv_abs_url varchar"
+            [versions]="paper_id varchar, version integer, version_date timestamp(6), version_date_raw varchar, reported_size_kb integer, is_metadata_only boolean, has_pdf boolean, pdf_sha256 varchar, has_ps boolean, n_ps_files integer, ps_bytes bigint, has_html boolean, n_html_files integer, source_version_proven boolean, license varchar, arxiv_pdf_url varchar, is_latest_version boolean, is_latest_pdf boolean, is_latest_ps boolean"
+            [files]="paper_id varchar, version integer, kind varchar, source varchar, path varchar, path_encoding varchar, size bigint, sha256 varchar, stored_as varchar, stored_sha256 varchar, stored_size bigint"
+          )
+          declare -A PROPS=(
+            [metadata]="partitioning = ARRAY['year(first_version_date)'], sorted_by = ARRAY['paper_id']"
+            [versions]="sorted_by = ARRAY['paper_id', 'version']"
+            [files]="sorted_by = ARRAY['paper_id', 'version', 'path']"
+          )
+          # 期待値 (HF の parquet のフッターの行数, 2026-11-23 に SMB の PVC で集計)
+          declare -A FILES=([metadata]=1 [versions]=1 [files]=6)
+          declare -A ROWS=([metadata]=3148796 [versions]=5030612 [files]=54597326)
+
+          q "CREATE SCHEMA IF NOT EXISTS iceberg.arxiv_staging" || exit 1
+          for t in metadata versions files; do
+            echo "=== $(date -u +%FT%TZ) $t: staging"
+            q "CREATE TABLE IF NOT EXISTS iceberg.arxiv_staging.$t (${COLS[$t]})
+               WITH (location = 's3://arxiv-warehouse/arxiv_staging/$t/iceberg')" || { fail=1; continue; }
+            n=$(q "SELECT count(*) FROM iceberg.arxiv_staging.\"$t\$files\"") || { fail=1; continue; }
+            if [ "$n" = 0 ]; then
+              q "ALTER TABLE iceberg.arxiv_staging.$t EXECUTE add_files(location => 's3://arxiv-warehouse/arxiv_staging/$t/data/hf/', format => 'PARQUET')" || { fail=1; continue; }
+            fi
+            r=$(q "SELECT count(*), sum(record_count) FROM iceberg.arxiv_staging.\"$t\$files\"") || { fail=1; continue; }
+            IFS=$'\t' read -r nf nr <<< "$r"
+            if [ "$nf" != "${FILES[$t]}" ] || [ "$nr" != "${ROWS[$t]}" ]; then
+              echo "[NG] staging $t files=$nf (expect ${FILES[$t]}) rows=$nr (expect ${ROWS[$t]})"; fail=1; continue
+            fi
+
+            echo "=== $(date -u +%FT%TZ) $t: CTAS"
+            if exists arxiv "$t"; then
+              echo "iceberg.arxiv.$t exists, skip CTAS"
+            else
+              # 場所は指定しない (既定の s3://arxiv-warehouse/arxiv/<テーブル>-<uuid>. 失敗後の再実行で書きかけの場所と重ならない)
+              q "CREATE TABLE iceberg.arxiv.$t WITH (${PROPS[$t]}) AS SELECT * FROM iceberg.arxiv_staging.$t" || { fail=1; continue; }
+            fi
+            c=$(q "SELECT count(*) FROM iceberg.arxiv.$t") || { fail=1; continue; }
+            if [ "$c" = "${ROWS[$t]}" ]; then echo "[OK] $t rows=$c"; else echo "[NG] $t rows=$c (expect ${ROWS[$t]})"; fail=1; fi
+          done
+
+          echo "=== $(date -u +%FT%TZ) checks"
+          # 版の数と最新版の数 (metadata の n_versions の合計 = versions の行数, 最新版 = 論文数)
+          q "SELECT (SELECT sum(n_versions) FROM iceberg.arxiv.metadata) AS sum_n_versions,
+                    (SELECT count(*) FROM iceberg.arxiv.versions) AS versions,
+                    (SELECT count_if(is_latest_version) FROM iceberg.arxiv.versions) AS latest,
+                    (SELECT count(DISTINCT paper_id) FROM iceberg.arxiv.metadata) AS papers" || fail=1
+          q "SELECT partition.first_version_date_year AS y, record_count, file_count FROM iceberg.arxiv.\"metadata\$partitions\" ORDER BY 1" || fail=1
+          echo "=== $(date -u +%FT%TZ) done"
+          q "SHOW TABLES FROM iceberg.arxiv"
+          [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+      volumes:
+      - name: tmp
+        emptyDir: {}
