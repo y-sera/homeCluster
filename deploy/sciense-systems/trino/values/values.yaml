@@ -78,6 +78,8 @@ catalogs:
     iceberg.rest-catalog.oauth2.scope=PRINCIPAL_ROLE:ALL
     iceberg.rest-catalog.vended-credentials-enabled=false
     iceberg.file-format=PARQUET
+    # 手順 5b: コピー済みの parquet を書き直さずに登録する (ALTER TABLE ... EXECUTE add_files). 既定は無効
+    iceberg.add-files-procedure.enabled=true
     fs.s3.enabled=true
     s3.endpoint=http://science-rustfs-svc.science-systems.svc:9000
     s3.region=us-east-1
