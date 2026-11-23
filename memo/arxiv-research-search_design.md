@@ -251,12 +251,12 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 手順 | 内容 | 状態 |
 |---|---|---|
 | 1 | RustFS を構築 | 完了 (2026-11-21) |
-| 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 実行中 (2026-11-21 開始) |
+| 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | コピーは完了 (2026-11-23). 確認は実行中 (2026-11-25 完了見込み) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
 | 3 | Trino (`mcp_reader` の制限を含む) | 完了 (2026-11-22. `memo/trino_install_memo.md`) |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/sciense-systems/chunking-poc/README.md`). 評価データは未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
-| 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 未着手 |
+| 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 実行中 (2026-11-23 開始. `memo/arxiv_iceberg_tables_memo.md`) |
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
@@ -285,9 +285,16 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [ ] 確認: qnap-vm で `sudo multipath -ll` が `features='1 queue_if_no_path'` であること, コンソール (port-forward)
 
 ### 手順 5a: コピーと確認
-- [ ] コピーの Job (arxiv-migrate-copy) を完了させる
-- [ ] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する
+- [x] コピーの Job (arxiv-migrate-copy) を完了させる (2026-11-23. 約 45 時間, エラーなし. arxiv-raw 13 個 4.07GiB, arxiv-warehouse 3,736 個 14.6TiB)
+- [ ] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する (2026-11-23 開始. 約 110MiB/s)
 - [ ] SMB の PVC (arxiv-datasets) の削除は手順 5b の検証後
+
+### 手順 5b: Iceberg テーブル
+- [x] Trino で add_files を有効にする (`iceberg.add-files-procedure.enabled=true`)
+- [x] add_files の動作確認 (フィールド ID のない parquet は name mapping で読める, 統計で読み飛ばせる, timestamp[ms] を読める)
+- [ ] 中身系 5 テーブルを add_files で登録する (Job arxiv-iceberg-content. 確認の Job と並行)
+- [ ] 索引系 3 テーブルを CTAS で書き直す (Job arxiv-iceberg-index. 確認の Job の完了後)
+- [ ] 作業用の名前空間 arxiv_staging のテーブルとファイルを削除する
 
 ### qnap-vm の廃止 (2026-11-22 完了)
 - [x] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
@@ -364,6 +371,12 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - MCP に検索方式の引数は出さない. `run_sql` の制限は Trino 側で強制する
 - OpenSearch は Intel NUC (64GB に増設) を検索ノード search1 とし, ローカル NVMe の PV に置く. エージェントのサンドボックスと同居させる
 - `paper_chunks` の codec は zstd, `papers` は default
+
+### 2026-11-23 (手順 5b)
+- 中身系 (paper_text, latex, ps, source, pdf) は add_files で登録し書き直さない. テーブルの場所は `arxiv/<テーブル>/iceberg`, データはコピー済みの `arxiv/<テーブル>/data/hf/` のまま (Trino は既にファイルがある場所にテーブルを作れないため)
+- 索引系は CTAS で書き直す. metadata は投稿年 (`year(first_version_date)`) で分割, versions / files は分割なし (小さいため). すべて paper_id で並べる
+- 識別キーは Iceberg の identifier fields として設定しない (Trino で設定できない). MERGE の ON 句で指定する
+- add_files で登録したテーブルは OPTIMIZE + expire_snapshots をしない (コピーした parquet が消えるため)
 
 ### 外部レビューで採らなかった案と理由
 | 案 | 理由 |
