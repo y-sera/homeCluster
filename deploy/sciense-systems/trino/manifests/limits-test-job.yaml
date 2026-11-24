@@ -1,0 +1,92 @@
+# Trino の mcp_reader の上限の確認 Job (読み取りのみ. テーブルは作らない).
+#   kubectl apply -f deploy/sciense-systems/trino/manifests/limits-test-job.yaml
+#   kubectl -n science-systems logs -f job/trino-limits-test
+# 再実行する場合は Job を削除してから apply する. イメージには grep / sed がないため bash の組み込み機能のみ使う.
+# 確認する内容 (values.yaml の resourceGroups / sessionProperties / accessControl):
+# - mcp_reader のセッションの既定値 (query_max_execution_time など) が設定どおりで, SET SESSION / --session で変更できない
+# - mcp_reader の問い合わせがリソースグループ root.mcp, admin が root.admin に入る
+# - 実行時間の上限で問い合わせが止まる (CPU だけを使う問い合わせで確認. 約 60 秒かかる)
+# - 読み込み量の上限の仕組み (admin で一時的に小さな値にして paper_id 列を走査する)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trino-limits-test
+  namespace: science-systems
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: test
+        image: trinodb/trino:484
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: SERVER
+          value: https://trino.cluster.orenet.net
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: admin-password
+        - name: MCP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trino-clients
+              key: mcp-reader-password
+        command:
+        - bash
+        - -c
+        - |
+          fail=0
+          # $1=user $2=期待 (ok | 失敗時のメッセージに含まれる文字列) $3=SQL [$4...=CLI の追加引数]
+          q() {
+            local user=$1 expect=$2 sql=$3; shift 3
+            if [ "$user" = admin ]; then export TRINO_PASSWORD="$ADMIN_PASSWORD"; else export TRINO_PASSWORD="$MCP_PASSWORD"; fi
+            out=$(trino --server "$SERVER" --user "$user" --password --output-format TSV "$@" --execute "$sql" 2>&1); rc=$?
+            if [ "$expect" = ok ] && [ $rc -eq 0 ]; then r=OK
+            elif [ "$expect" != ok ] && [ $rc -ne 0 ] && [[ "$out" == *"$expect"* ]]; then r=OK
+            else r=NG; fail=1; fi
+            echo "[$r] ($user, expect: $expect) $sql $*"; n=0; while IFS= read -r l && [ $n -lt 6 ]; do echo "    $l"; n=$((n+1)); done <<< "$out"
+          }
+
+          echo "=== mcp_reader: session defaults"
+          for p in query_max_execution_time query_max_run_time query_max_scan_physical_bytes query_max_memory; do
+            q mcp_reader ok "SHOW SESSION LIKE '$p'"
+          done
+          echo "=== mcp_reader: cannot change session properties"
+          q mcp_reader "Access Denied" "SET SESSION query_max_execution_time = '1h'"
+          q mcp_reader "Access Denied" "SELECT 1" --session query_max_execution_time=1h
+          q mcp_reader "Access Denied" "SELECT 1" --session iceberg.projection_pushdown_enabled=false
+          echo "=== admin: can change session properties (defaults are unchanged)"
+          q admin ok "SHOW SESSION LIKE 'query_max_execution_time'"
+          q admin ok "SELECT 1" --session query_max_execution_time=2h
+
+          echo "=== resource groups"
+          q mcp_reader ok "SELECT user, resource_group_id FROM system.runtime.queries WHERE state = 'RUNNING' AND user = 'mcp_reader'"
+          q admin ok "SELECT user, resource_group_id FROM system.runtime.queries WHERE state = 'RUNNING' AND user = 'admin'"
+
+          echo "=== mcp_reader: execution time limit (about 60s)"
+          q mcp_reader "maximum" "SELECT count(*) FROM UNNEST(sequence(1, 20000)) a(x) CROSS JOIN UNNEST(sequence(1, 20000)) b(y) CROSS JOIN UNNEST(sequence(1, 20000)) c(z) WHERE x + y + z = 7"
+
+          echo "=== scan limit mechanism (admin, temporary 1MB)"
+          q admin ok "SELECT count(paper_id) FROM iceberg.arxiv.paper_text WHERE paper_id = '0704.0001'"
+          q admin "scan physical bytes" "SELECT count(DISTINCT paper_id) FROM iceberg.arxiv.paper_text" --session query_max_scan_physical_bytes=1MB
+
+          [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi

@@ -92,6 +92,7 @@ catalogs:
 # - admin: すべて (テーブルの作成, add_files / unregister_table などのプロシージャ. procedures で明示的に許可が必要)
 # - mcp_reader: カタログ iceberg の名前空間 arxiv の SELECT のみ. pdf / source / ps / latex の content 列
 #   (論文の本体のバイナリ) は拒否する (SELECT * も失敗するため, 列を指定して問い合わせる)
+#   セッションプロパティの変更 (SET SESSION) は admin のみ (mcp_reader の上限を変更させないため)
 accessControl:
   type: configmap
   refreshPeriod: 60s
@@ -123,8 +124,66 @@ accessControl:
         ],
         "system_information": [
           {"user": "admin", "allow": ["read", "write"]}
+        ],
+        "system_session_properties": [
+          {"user": "admin", "allow": true}
+        ],
+        "catalog_session_properties": [
+          {"user": "admin", "allow": true}
         ]
       }
+
+# リソースグループ (/etc/trino/resource-groups/resource-groups.json). 同時実行数, 待ち行列, メモリの上限をユーザーごとに分ける.
+# softMemoryLimit の % はクラスタのメモリ (query.maxMemory 3GB) に対する割合.
+# - root.admin: 手作業・バッチ (Iceberg テーブルの作成など) 用. 上限はクラスタ全体と同じ
+# - root.mcp: mcp_reader (MCP サーバー経由の LLM エージェント). 同時 3 件, 待ち 20 件, メモリ 1GB 程度まで
+# - root.other: 上記以外 (現在は使わない)
+resourceGroups:
+  type: configmap
+  resourceGroupsConfig: |-
+    {
+      "rootGroups": [
+        {
+          "name": "root",
+          "softMemoryLimit": "100%",
+          "hardConcurrencyLimit": 10,
+          "maxQueued": 100,
+          "schedulingPolicy": "fair",
+          "subGroups": [
+            {"name": "admin", "softMemoryLimit": "100%", "hardConcurrencyLimit": 5, "maxQueued": 50},
+            {"name": "mcp", "softMemoryLimit": "35%", "hardConcurrencyLimit": 3, "maxQueued": 20},
+            {"name": "other", "softMemoryLimit": "20%", "hardConcurrencyLimit": 1, "maxQueued": 5}
+          ]
+        }
+      ],
+      "selectors": [
+        {"user": "admin", "group": "root.admin"},
+        {"user": "mcp_reader", "group": "root.mcp"},
+        {"group": "root.other"}
+      ]
+    }
+
+# セッションプロパティの既定値 (/etc/trino/session-property-config.json). mcp_reader の問い合わせ 1 件あたりの上限.
+# mcp_reader は SET SESSION で変更できない (accessControl の session_properties で admin 以外を拒否).
+# - query_max_execution_time: 実行時間 (待ち行列の時間を含まない). 対話的な検索を想定して 60 秒
+# - query_max_run_time: 待ち行列を含む全体の時間
+# - query_max_scan_physical_bytes: 読み込むデータ量. paper_text (本文, 約 66GB) の全件走査などを防ぐ.
+#   metadata (1.6GB) の全件走査はできる大きさにする
+# - query_max_memory: 1 件のメモリ (resource group の mcp の上限より小さく)
+sessionProperties:
+  type: configmap
+  sessionPropertiesConfig: |-
+    [
+      {
+        "user": "mcp_reader",
+        "sessionProperties": {
+          "query_max_execution_time": "60s",
+          "query_max_run_time": "120s",
+          "query_max_scan_physical_bytes": "8GB",
+          "query_max_memory": "800MB"
+        }
+      }
+    ]
 
 ingress:
   enabled: true
