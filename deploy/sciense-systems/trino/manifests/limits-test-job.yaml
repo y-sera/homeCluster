@@ -6,6 +6,7 @@
 # - mcp_reader のセッションの既定値 (query_max_execution_time など) が設定どおりで, SET SESSION / --session で変更できない
 # - mcp_reader の問い合わせがリソースグループ root.mcp, admin が root.admin に入る
 # - 実行時間の上限で問い合わせが止まる (CPU だけを使う問い合わせで確認. 約 60 秒かかる)
+# - メモリの上限 (query_max_memory. SHOW SESSION には表示されない) で問い合わせが止まる
 # - 読み込み量の上限の仕組み (admin で一時的に小さな値にして paper_id 列を走査する)
 apiVersion: batch/v1
 kind: Job
@@ -61,7 +62,7 @@ spec:
           }
 
           echo "=== mcp_reader: session defaults"
-          for p in query_max_execution_time query_max_run_time query_max_scan_physical_bytes query_max_memory; do
+          for p in query_max_execution_time query_max_run_time query_max_scan_physical_bytes; do
             q mcp_reader ok "SHOW SESSION LIKE '$p'"
           done
           echo "=== mcp_reader: cannot change session properties"
@@ -77,11 +78,14 @@ spec:
           q admin ok "SELECT user, resource_group_id FROM system.runtime.queries WHERE state = 'RUNNING' AND user = 'admin'"
 
           echo "=== mcp_reader: execution time limit (about 60s)"
-          q mcp_reader "maximum" "SELECT count(*) FROM UNNEST(sequence(1, 20000)) a(x) CROSS JOIN UNNEST(sequence(1, 20000)) b(y) CROSS JOIN UNNEST(sequence(1, 20000)) c(z) WHERE x + y + z = 7"
+          q mcp_reader "maximum" "SELECT count(*) FROM UNNEST(sequence(1, 10000)) a(x) CROSS JOIN UNNEST(sequence(1, 10000)) b(y) CROSS JOIN UNNEST(sequence(1, 10000)) c(z) WHERE x + y + z = 7"
+
+          echo "=== mcp_reader: memory limit (query_max_memory 800MB. SHOW SESSION には表示されない)"
+          q mcp_reader "memory limit" "SELECT count(*) FROM (SELECT DISTINCT x * 100000000 + y * 10000 + z FROM UNNEST(sequence(1, 10000)) a(x) CROSS JOIN UNNEST(sequence(1, 10000)) b(y) CROSS JOIN UNNEST(sequence(1, 100)) c(z))"
 
           echo "=== scan limit mechanism (admin, temporary 1MB)"
           q admin ok "SELECT count(paper_id) FROM iceberg.arxiv.paper_text WHERE paper_id = '0704.0001'"
-          q admin "scan physical bytes" "SELECT count(DISTINCT paper_id) FROM iceberg.arxiv.paper_text" --session query_max_scan_physical_bytes=1MB
+          q admin "scan limit" "SELECT count(DISTINCT paper_id) FROM iceberg.arxiv.paper_text" --session query_max_scan_physical_bytes=1MB
 
           [ $fail = 0 ] && echo "ALL OK" || { echo "SOME CHECKS FAILED"; exit 1; }
         resources:

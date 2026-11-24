@@ -13,16 +13,18 @@ Polaris (Iceberg REST カタログ, カタログ `arxiv`) の目録を使い, �
 | Polaris の権限 | principal `trino` → principal role `trino` → catalog role `trino_rw` (CATALOG_MANAGE_CONTENT) |
 | RustFS のユーザー | `trino` (ポリシー `arxiv-warehouse-rw`. Polaris と共用. arxiv-raw は不可) |
 | 認証 | パスワードファイル. ユーザー `admin` (すべて), `mcp_reader` (読み取りのみ) |
+| mcp_reader の上限 | リソースグループ `root.mcp` (同時 3 件, 待ち 20 件, メモリ 35%), 1 件あたり実行 60 秒 / 待ちを含め 120 秒 / 読み込み 8GB / メモリ 800MB. SET SESSION は admin のみ |
 
 ファイル
 ```
 applications/science-trino.yaml
-deploy/sciense-systems/trino/values/values.yaml       # カタログ, アクセス制御 (rules.json), Ingress, Certificate (extraManifests)
+deploy/sciense-systems/trino/values/values.yaml       # カタログ, アクセス制御 (rules.json), リソースグループ, セッションの既定値, Ingress, Certificate (extraManifests)
 deploy/sciense-systems/trino/manifests/
   trino-external-secrets.yaml   # trino-password (password.db), trino-internal (共有鍵), trino-storage (RustFS), trino-clients (平文のパスワード)
   rustfs-trino-user-job.yaml    # RustFS のユーザー trino
   polaris-principal-job.yaml    # Polaris の principal trino と権限. 認証情報を Secret trino-polaris に書く
-  smoke-test-job.yaml           # 動作確認
+  smoke-test-job.yaml           # 動作確認 (導入時のみ. 本番のテーブル名 arxiv.latex を作るため手順 5b 以降は実行しない)
+  limits-test-job.yaml          # mcp_reader の上限の確認 (読み取りのみ. いつでも実行できる)
 ```
 
 Vault
@@ -51,6 +53,9 @@ kubectl apply -f applications/science-trino.yaml             # 登録後に同�
 # 5. 動作確認 (手順 5b でテーブル iceberg.arxiv.latex を作った後は実行しない)
 kubectl apply -f $M/smoke-test-job.yaml
 kubectl -n science-systems logs job/trino-smoke-test         # ALL OK
+# 6. mcp_reader の上限の確認 (読み取りのみ. 約 3 分)
+kubectl apply -f $M/limits-test-job.yaml
+kubectl -n science-systems logs -f job/trino-limits-test      # ALL OK
 ```
 5 の確認用テーブルのファイルが RustFS に残るため, RustFS の root で削除する.
 **`arxiv/latex/` (コピーしたデータ) ではなく `arxiv/latex-<uuid>/` のみ消す**:
@@ -74,6 +79,17 @@ Python (`trino` パッケージ): `trino.dbapi.connect(host="trino.cluster.orene
   明示的に許可しないと admin でも拒否される
 - mcp_reader は pdf / source / ps / latex の `content` 列を読めない. `SELECT *` も拒否されるため, 列名を指定する.
   規則は名前空間 `arxiv` のテーブル名 (`pdf|source|ps|latex`) に一致させている. 本体の列を持つテーブルを追加したら rules.json を更新する
+- **mcp_reader の上限** (MCP サーバー経由の LLM エージェントの問い合わせが Trino を占有しないため):
+  - リソースグループ (`resourceGroups`): ユーザーで `root.admin` / `root.mcp` / `root.other` に振り分ける. `root.mcp` は同時 3 件, 待ち 20 件,
+    メモリはクラスタ (3GB) の 35%. 振り分けは `system.runtime.queries` の `resource_group_id` で確認できる
+  - セッションの既定値 (`sessionProperties`, ユーザー `mcp_reader` に一致): `query_max_execution_time` 60s, `query_max_run_time` 120s,
+    `query_max_scan_physical_bytes` 8GB (paper_text の本文 約 66GB の全件走査を防ぐ. metadata 1.6GB の全件走査はできる), `query_max_memory` 800MB
+    (`query_max_memory` は SHOW SESSION に表示されないが効いている)
+  - rules.json の `system_session_properties` / `catalog_session_properties` で admin 以外の SET SESSION (`--session` を含む) を拒否する.
+    この節を書くと一致しないユーザーはすべて拒否される (書かない場合は全員が変更できる)
+  - エラー: `Query exceeded the maximum execution time limit of 60.00s`, `Exceeded scan limit of 8GB`, `Query exceeded distributed user memory limit of 800MB`.
+    MCP サーバーはこれらを利用者 (LLM) に伝え, 条件を絞った問い合わせに直させる
+  - リソースグループとセッションの既定値の変更は coordinator の再起動で反映される (values の変更 → ArgoCD の同期で Pod が作り直される)
 - アクセス制御の規則 (ConfigMap) は Pod を再起動せずに反映される (ConfigMap の反映 1 分程度 + Trino の読み直し 60 秒)
 - パスワードファイルは ESO のテンプレート (sprig `htpasswd "user" pass "bcrypt"`) で作る. Trino は `$2y$` しか受け付けないため `$2a$` を置き換える.
   ソルトが毎回変わるため `refreshPolicy: CreatedOnce`. パスワードを変えた場合は Secret `trino-password` を削除して作り直す
