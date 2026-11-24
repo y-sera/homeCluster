@@ -2,7 +2,7 @@
 # chart: gitlab/gitlab (https://charts.gitlab.io/)。helm CLI で管理する (ArgoCD 管理外)。
 #   ArgoCD は GitLab 上のこのリポジトリを参照しているため、GitLab 自体を ArgoCD で管理すると障害時に復旧できなくなる。
 #
-#   helm upgrade gitlab gitlab/gitlab -n gitlab --version 10.5.5 -f deploy/gitlab/gitlab/values/values.yaml
+#   helm upgrade gitlab gitlab/gitlab -n gitlab --version 10.6.1 -f deploy/gitlab/gitlab/values/values.yaml
 #
 # chart のデフォルトから変更する値のみ記載する。
 # 旧 values (helm/gitlab/values.yaml, 2026-11-12 削除) は chart デフォルトの全量コピーだったため、外部化に合わせて差分のみに整理した。
