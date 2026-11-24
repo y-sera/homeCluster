@@ -313,7 +313,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] パスワード認証 (admin / mcp_reader) を Ingress https://trino.cluster.orenet.net の TLS で受ける
 - [x] mcp_reader: iceberg.arxiv の読み取りのみ, pdf / source / ps / latex の content 列は拒否 (動作確認の Job で確認)
 - [x] Polaris の purge は無効のまま (DROP TABLE は失敗する. add_files で登録するコピー済みの parquet を守るため). 削除は unregister_table
-- [ ] mcp_reader の上限: resource groups (同時実行数, メモリ), `query_max_execution_time`, `query_max_scan_physical_bytes` (手順 8 の MCP の前に)
+- [x] mcp_reader の上限: resource groups (同時実行数, メモリ), `query_max_execution_time`, `query_max_scan_physical_bytes` (2026-11-24. root.mcp 同時 3 件, 1 件あたり 60 秒 / 8GB / 800MB, SET SESSION は admin のみ. `trino_install_memo.md`)
 - [ ] メトリクス (ServiceMonitor. 収集用のユーザーが必要)
 
 ### 手順 4: 検索ノード search1
