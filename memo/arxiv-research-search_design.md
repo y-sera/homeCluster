@@ -27,7 +27,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 
 ## 3. 現状のデータ (2026-11-18 時点)
 - PVC `science-systems/arxiv-datasets` (qnap-smb, RWX, 17Ti) に HF のリポジトリ構成のまま約 15TB (RustFS への移行後, 2026-11-25 に削除)
-  (取得 Job: `deploy/sciense-systems/manifests/hf-downloader-job.yaml`. PVC の削除に合わせて 2026-11-26 に削除)
+  (取得 Job: `deploy/science-systems/manifests/hf-downloader-job.yaml`. PVC の削除に合わせて 2026-11-26 に削除)
 - スナップショット: メタデータ 2026-08-30 (OAI-PMH arXivRaw), ファイル 2026-09-05. データセット側の自動更新はない
 
 | config | 1 行 | 行数 | parquet | 主な列 |
@@ -99,7 +99,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 索引系 (metadata, versions, files): 書き直して Iceberg テーブルにする. 識別キー (paper_id / (paper_id, version)) を設け MERGE 可能にし, 投稿月やカテゴリで分割する
 - テキスト・中身系 (paper_text, latex, source, pdf, ps): parquet を RustFS にコピーし `add_files` で登録する (書き直さない). paper_id 順のため統計で読み飛ばせる
 - コピー先: 中身系は `s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/<元のファイル名>` (catalog arxiv の既定の場所の下), 索引系と README / SHA256SUMS は `s3://arxiv-raw/hf/arxiv-complete/<元のパス>`
-- コピーは rclone の Job (`deploy/sciense-systems/manifests/arxiv-migrate-copy-job.yaml`) で, RustFS と同じ worker で行う. 確認は SHA256SUMS との照合 (`arxiv-migrate-verify-job.yaml`)
+- コピーは rclone の Job (`deploy/science-systems/manifests/arxiv-migrate-copy-job.yaml`) で, RustFS と同じ worker で行う. 確認は SHA256SUMS との照合 (`arxiv-migrate-verify-job.yaml`)
 - qnap-vm (QNAP 上の VM) での実行は VM の CPU が上限になり約 49MB/s だったため不採用. worker は 1GbE の送受信を両方使い約 100MB/s (2026-11-21 に測定)
 - rclone のマルチスレッドコピーは cifs の先読みと重なり読み込みが約 3 倍に増える (約 30MiB/s) ため無効にする (約 90MiB/s)
 
@@ -254,7 +254,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 完了 (2026-11-25. 3,745 ファイルの sha256 が一致. SMB の PVC は削除) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
 | 3 | Trino (`mcp_reader` の制限を含む) | 完了 (2026-11-22. `memo/trino_install_memo.md`) |
-| 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/sciense-systems/chunking-poc/README.md`). 評価データは未着手 |
+| 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/science-systems/chunking-poc/README.md`). 評価データは未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
 | 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 完了 (2026-11-25. 8 テーブル. `memo/arxiv_iceberg_tables_memo.md`) |
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
@@ -326,14 +326,14 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [ ] SATA SSD を追加する (サンドボックスを動かす前, または本文索引の実測で必要になった時)
 
 ### 検証と評価
-- [x] チャンク作成の検証 (1,000 件 → 10,000 件) と統計 (2026-11-22. 正規化 99.4%, 節の抽出 99.9%, 全件で約 9,100 万チャンク・480 億トークン・本文 155GB・83 CPU 時間. `deploy/sciense-systems/chunking-poc/README.md`)
+- [x] チャンク作成の検証 (1,000 件 → 10,000 件) と統計 (2026-11-22. 正規化 99.4%, 節の抽出 99.9%, 全件で約 9,100 万チャンク・480 億トークン・本文 155GB・83 CPU 時間. `deploy/science-systems/chunking-poc/README.md`)
 - [x] 短い節 (100 トークン未満. 全チャンクの 5.4%) のチャンクはそのまま残す (節をまたがない. 2026-11-22 決定)
 - [x] section_type の other (28%) は今のまま (規則の分類で十分. 2026-11-22 決定)
 - [ ] 索引の容量と作成時間 (codec 別) を測る (検証の 10,000 件のチャンクを使う. OpenSearch ができてから)
 - [ ] 評価データを作る (引用の文脈, LLM 生成, 手作り)
 
 ### 全体
-- [ ] `deploy/sciense-systems` のディレクトリ名の綴り (science) を直すか決める
+- [x] ディレクトリ名の綴りを直す (2026-11-26. `deploy/sciense-systems` → `deploy/science-systems`. Application 3 つの valueFiles も変更)
 - [x] ~~science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする~~ (2026-11-26. 使う Job がなくなったため hf-downloader-job と一緒に削除. Vault のキーは llm-system が使う)
 - [ ] AWS の認証情報 (requester-pays 用) を Vault に登録する
 - [ ] 埋め込みモデルを決める (評価で)
