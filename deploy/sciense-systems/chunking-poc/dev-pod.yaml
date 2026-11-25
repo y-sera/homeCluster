@@ -2,6 +2,7 @@
 #   kubectl apply -f deploy/sciense-systems/chunking-poc/dev-pod.yaml
 #   kubectl -n science-systems exec -it chunking-poc -- bash
 # - 元データ (PVC arxiv-datasets, HF のリポジトリ構成) を /src に読み取り専用でマウントする
+#   → PVC arxiv-datasets は 2026-11-25 に削除した. 作り直す場合は /src の代わりに RustFS (s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/) から読む
 # - 作業領域 /work (Longhorn): Python の venv (/work/venv), 抽出したサンプル, 加工結果, 統計
 # - コピーの Job (arxiv-migrate-copy) と RustFS がいる worker2 を避ける (SMB の読み込みとネットワークの競合を減らす)
 apiVersion: v1

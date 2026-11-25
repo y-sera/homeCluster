@@ -13,7 +13,7 @@ HF のデータセット (secemp9/arxiv-complete) を Iceberg テーブルにす
 | pdf | add_files | `arxiv/pdf/iceberg` | なし / paper_id | 4,973,956 |
 | metadata | CTAS (書き直し) | `arxiv/metadata-<uuid>` | year(first_version_date) / paper_id | 3,148,796 |
 | versions | CTAS | `arxiv/versions-<uuid>` | なし / paper_id, version | 5,030,612 |
-| files | CTAS | `arxiv/files-<uuid>` | なし / paper_id, version, path | 54,597,326 |
+| paper_files (元の files) | CTAS | `arxiv/paper_files-<uuid>` | なし / paper_id, version, path | 54,597,326 |
 
 場所は `s3://arxiv-warehouse/` からの相対パス. 列は元の parquet と同じ (設計メモ 3 章).
 中身系の並び (sorted_by) は今後の書き込み用の設定. 既存の parquet はもともと paper_id の辞書順 (新形式 ID が先, 旧形式が後) のため,
@@ -30,7 +30,7 @@ kubectl apply -f $M/arxiv-iceberg-index-job.yaml
 kubectl -n science-systems logs -f job/arxiv-iceberg-index -c stage
 kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build     # ALL OK
 # 3. 作業用のテーブルとファイルの削除 (2 の確認後)
-#    Trino (admin): CALL iceberg.system.unregister_table(schema_name => 'arxiv_staging', table_name => 'metadata') など 3 つ
+#    Trino (admin): CALL iceberg.system.unregister_table(schema_name => 'arxiv_staging', table_name => 'metadata') など 3 つ (metadata / versions / paper_files)
 #                   DROP SCHEMA iceberg.arxiv_staging
 #    RustFS (root): s3://arxiv-warehouse/arxiv_staging/ を削除 (元の parquet は arxiv-raw に残る)
 ```
@@ -52,5 +52,8 @@ kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build     # ALL OK
 - iSCSI が混雑している間 (確認の Job の実行中など) は RustFS の書き込みが 1 件数秒かかり, 並べ替えて書く CTAS が
   `HIVE_WRITER_CLOSE_ERROR` で失敗することがあった (2 回目は成功. versions の CTAS に 232 秒).
   並べ替えの作業ファイルは `<テーブルの場所>/data/trino-tmp-files/` に書かれ, 失敗すると残る
+- **テーブル名 `files` は使えない.** Trino は `files` / `history` / `snapshots` / `manifests` / `partitions` / `refs` など
+  Iceberg のメタデータテーブルの種類と同じ名前を「テーブル <名前空間> の `$files`」と解釈する (Polaris に `namespaces//tables/<名前空間>` を問い合わせる).
+  作成は "already exists" / IF NOT EXISTS は何もせず成功, 参照は "Metadata not found in metadata location" になる. そのため元の files は `paper_files` にした
 - mcp_reader は名前空間 `arxiv` のみ読める (`arxiv_staging` は不可). pdf / source / ps / latex の content 列は拒否 (trino/values/values.yaml)
 - Trino の動作確認の Job (`trino/manifests/smoke-test-job.yaml`) は iceberg.arxiv.latex を作って消すため, 今後は実行しない

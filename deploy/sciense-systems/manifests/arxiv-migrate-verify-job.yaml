@@ -1,5 +1,6 @@
 # 初回のデータ移行の確認 Job. RustFS にコピーした parquet (3,745 ファイル) を読み直して sha256 を計算し,
 # データセットの SHA256SUMS (HF の LFS の sha256) と照合する.
+# 完了済み (2026-11-25 03:23 UTC, OK: all 3745 files match). その後 PVC arxiv-datasets を削除した.
 # コピーの Job (arxiv-migrate-copy) が完了してから手動で apply する:
 #   kubectl apply -f deploy/sciense-systems/manifests/arxiv-migrate-verify-job.yaml
 #   kubectl -n science-systems logs -f job/arxiv-migrate-verify

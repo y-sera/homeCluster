@@ -1,3 +1,5 @@
+# 削除済み (2026-11-25): PVC arxiv-datasets (SMB, QNAP) は手順 5a のコピーと確認の後に削除した (中身は RustFS の arxiv-warehouse / arxiv-raw).
+# 記録として残す. 再び apply しないこと
 apiVersion: batch/v1
 kind: Job
 metadata:

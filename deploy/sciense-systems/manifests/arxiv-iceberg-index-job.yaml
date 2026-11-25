@@ -10,7 +10,9 @@
 #   2. (build) iceberg.arxiv_staging.<テーブル> として add_files で登録し, CTAS で iceberg.arxiv.<テーブル> に書き直す
 #      - metadata: 投稿年 (first_version_date の年) で分割, paper_id で並べる (1 論文 1 行. キー paper_id)
 #      - versions: 分割なし, (paper_id, version) で並べる (キー (paper_id, version))
-#      - files:    分割なし, (paper_id, version, path) で並べる
+#      - files:    分割なし, (paper_id, version, path) で並べる. テーブル名は paper_files
+#        (Trino は files / history など Iceberg のメタデータテーブルの種類と同じ名前のテーブルを扱えない.
+#         iceberg.<名前空間>.files を「テーブル <名前空間> の $files」と解釈し, 作成も参照もできない)
 #      キーは Iceberg の identifier fields としては設定しない (Trino では設定できない. MERGE は ON 句で指定する)
 #   3. 行数を元の parquet の行数と照合する
 # - 作成後の作業用のテーブルとファイルの削除は手動 (memo/arxiv_iceberg_tables_memo.md)
@@ -115,6 +117,8 @@ spec:
             [versions]="paper_id varchar, version integer, version_date timestamp(6), version_date_raw varchar, reported_size_kb integer, is_metadata_only boolean, has_pdf boolean, pdf_sha256 varchar, has_ps boolean, n_ps_files integer, ps_bytes bigint, has_html boolean, n_html_files integer, source_version_proven boolean, license varchar, arxiv_pdf_url varchar, is_latest_version boolean, is_latest_pdf boolean, is_latest_ps boolean"
             [files]="paper_id varchar, version integer, kind varchar, source varchar, path varchar, path_encoding varchar, size bigint, sha256 varchar, stored_as varchar, stored_sha256 varchar, stored_size bigint"
           )
+          # テーブル名 (元の parquet のディレクトリ名 → Trino のテーブル名)
+          declare -A NAME=([metadata]=metadata [versions]=versions [files]=paper_files)
           declare -A PROPS=(
             [metadata]="partitioning = ARRAY['year(first_version_date)'], sorted_by = ARRAY['paper_id']"
             [versions]="sorted_by = ARRAY['paper_id', 'version']"
@@ -126,28 +130,29 @@ spec:
 
           q "CREATE SCHEMA IF NOT EXISTS iceberg.arxiv_staging" || exit 1
           for t in metadata versions files; do
-            echo "=== $(date -u +%FT%TZ) $t: staging"
-            q "CREATE TABLE IF NOT EXISTS iceberg.arxiv_staging.$t (${COLS[$t]})
-               WITH (location = 's3://arxiv-warehouse/arxiv_staging/$t/iceberg')" || { fail=1; continue; }
-            n=$(q "SELECT count(*) FROM iceberg.arxiv_staging.\"$t\$files\"") || { fail=1; continue; }
+            tn=${NAME[$t]}
+            echo "=== $(date -u +%FT%TZ) $tn: staging"
+            q "CREATE TABLE IF NOT EXISTS iceberg.arxiv_staging.$tn (${COLS[$t]})
+               WITH (location = 's3://arxiv-warehouse/arxiv_staging/$tn/iceberg')" || { fail=1; continue; }
+            n=$(q "SELECT count(*) FROM iceberg.arxiv_staging.\"$tn\$files\"") || { fail=1; continue; }
             if [ "$n" = 0 ]; then
-              q "ALTER TABLE iceberg.arxiv_staging.$t EXECUTE add_files(location => 's3://arxiv-warehouse/arxiv_staging/$t/data/hf/', format => 'PARQUET')" || { fail=1; continue; }
+              q "ALTER TABLE iceberg.arxiv_staging.$tn EXECUTE add_files(location => 's3://arxiv-warehouse/arxiv_staging/$t/data/hf/', format => 'PARQUET')" || { fail=1; continue; }
             fi
-            r=$(q "SELECT count(*), sum(record_count) FROM iceberg.arxiv_staging.\"$t\$files\"") || { fail=1; continue; }
+            r=$(q "SELECT count(*), sum(record_count) FROM iceberg.arxiv_staging.\"$tn\$files\"") || { fail=1; continue; }
             IFS=$'\t' read -r nf nr <<< "$r"
             if [ "$nf" != "${FILES[$t]}" ] || [ "$nr" != "${ROWS[$t]}" ]; then
-              echo "[NG] staging $t files=$nf (expect ${FILES[$t]}) rows=$nr (expect ${ROWS[$t]})"; fail=1; continue
+              echo "[NG] staging $tn files=$nf (expect ${FILES[$t]}) rows=$nr (expect ${ROWS[$t]})"; fail=1; continue
             fi
 
-            echo "=== $(date -u +%FT%TZ) $t: CTAS"
-            if exists arxiv "$t"; then
-              echo "iceberg.arxiv.$t exists, skip CTAS"
+            echo "=== $(date -u +%FT%TZ) $tn: CTAS"
+            if exists arxiv "$tn"; then
+              echo "iceberg.arxiv.$tn exists, skip CTAS"
             else
               # 場所は指定しない (既定の s3://arxiv-warehouse/arxiv/<テーブル>-<uuid>. 失敗後の再実行で書きかけの場所と重ならない)
-              q "CREATE TABLE iceberg.arxiv.$t WITH (${PROPS[$t]}) AS SELECT * FROM iceberg.arxiv_staging.$t" || { fail=1; continue; }
+              q "CREATE TABLE iceberg.arxiv.$tn WITH (${PROPS[$t]}) AS SELECT * FROM iceberg.arxiv_staging.$tn" || { fail=1; continue; }
             fi
-            c=$(q "SELECT count(*) FROM iceberg.arxiv.$t") || { fail=1; continue; }
-            if [ "$c" = "${ROWS[$t]}" ]; then echo "[OK] $t rows=$c"; else echo "[NG] $t rows=$c (expect ${ROWS[$t]})"; fail=1; fi
+            c=$(q "SELECT count(*) FROM iceberg.arxiv.$tn") || { fail=1; continue; }
+            if [ "$c" = "${ROWS[$t]}" ]; then echo "[OK] $tn rows=$c"; else echo "[NG] $tn rows=$c (expect ${ROWS[$t]})"; fail=1; fi
           done
 
           echo "=== $(date -u +%FT%TZ) checks"
