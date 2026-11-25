@@ -22,6 +22,7 @@ deploy/science-systems/polaris/manifests/
   postgres-external-secrets.yaml   # polaris-postgres-app (CNPG 用, basic-auth), polaris-persistence (username / password / jdbcUrl)
   polaris-external-secrets.yaml    # polaris-token-keys (RSA), polaris-root, polaris-storage
   postgres-cluster.yaml            # CNPG Cluster + PodMonitor
+  postgres-backup-cronjob.yaml     # 目録の毎日のダンプ (RustFS の science-backups へ)
   rustfs-polaris-user-job.yaml     # RustFS のユーザー polaris とポリシー (rustfs/rc)
   bootstrap-job.yaml               # realm の初期化 (admin tool)
   catalog-setup-job.yaml           # カタログ arxiv, 名前空間 arxiv, テーブル作成の確認
@@ -44,6 +45,7 @@ kubectl -n science-systems get es
 # 2. PostgreSQL (スキーマ polaris_schema は postInitApplicationSQL で作られる)
 kubectl apply -f $M/postgres-cluster.yaml
 kubectl -n science-systems get cluster polaris-postgres     # Cluster in healthy state
+kubectl apply -f $M/postgres-backup-cronjob.yaml           # 毎日 03:30 JST にダンプ
 # 3. RustFS のユーザー
 kubectl apply -f $M/rustfs-polaris-user-job.yaml
 kubectl -n science-systems logs job/rustfs-polaris-user     # OK: arxiv-raw is denied
@@ -70,7 +72,26 @@ kubectl -n science-systems logs job/polaris-catalog-setup   # done
 - `stsUnavailable: true` ではクライアントへの認証情報の払い出し (vended credentials) が行われない. Trino / PyIceberg / Spark は各自の RustFS の認証情報を使う.
 - テーブル削除の purge (ファイルの削除) は既定で無効 (403). テーブルを消しても RustFS のファイルは残る.
 - スキーマは JDBC の URL (`?currentSchema=polaris_schema`) で指定し, サーバーと admin tool で揃えている. Polaris はスキーマを作らないため CNPG で作る.
-- PostgreSQL のバックアップは未設定. 目録を失っても, RustFS の metadata.json から `register_table` で登録し直せる (権限の設定は失われる).
+- PostgreSQL のバックアップは毎日 03:30 JST の pg_dump (下記). 最悪でも, RustFS の metadata.json から `register_table` で登録し直せる (権限の設定は失われる).
+
+## 目録のバックアップと戻し方
+- CronJob `polaris-postgres-backup` が `pg_dump --format=custom --no-owner --no-privileges` を
+  `s3://science-backups/polaris-postgres/polaris-<UTC 時刻>.dump` に置く (2026-11 時点で約 27KB). 30 日より古いものは削除する.
+  Barman Cloud Plugin (WAL を含む継続的なバックアップ) は目録が小さく, 失っても登録し直せるため使わない
+- すぐに取る: `kubectl -n science-systems create job polaris-postgres-backup-<名前> --from=cronjob/polaris-postgres-backup`
+- 戻し方 (2026-11-26 に一時 DB への復元で確認済み. 全テーブルの行数が一致):
+  ```bash
+  # ダンプを取り出す (RustFS の root で. rclone の場合)
+  rclone copy dst:science-backups/polaris-postgres/polaris-<時刻>.dump .
+  # Polaris を止める (書き込みを止めるため)
+  kubectl -n science-systems scale deploy polaris --replicas=0
+  # 既存の中身を消して戻す (Cluster を作り直した場合はスキーマが空なのでそのまま pg_restore)
+  P="kubectl -n science-systems exec -i polaris-postgres-1 -c postgres --"
+  $P psql -U postgres -d polaris -c "DROP SCHEMA polaris_schema CASCADE; CREATE SCHEMA polaris_schema AUTHORIZATION polaris"
+  $P pg_restore -U postgres -d polaris --no-owner --role=polaris < polaris-<時刻>.dump
+  # Polaris を戻す (ArgoCD の同期, または scale --replicas=1)
+  ```
+- ダンプにはロール (polaris) が含まれない. Cluster を作り直した場合, ロールは bootstrap (initdb の owner) で作られる
 
 ## 動作確認
 ```bash
