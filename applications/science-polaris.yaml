@@ -12,7 +12,7 @@ spec:
   - repoURL: https://downloads.apache.org/polaris/helm-chart
     helm:
       valueFiles:
-      - $configs/deploy/sciense-systems/polaris/values/values.yaml
+      - $configs/deploy/science-systems/polaris/values/values.yaml
       releaseName: polaris
     chart: polaris
     targetRevision: 1.9.0

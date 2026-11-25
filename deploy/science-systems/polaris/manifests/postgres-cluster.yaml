@@ -1,8 +1,8 @@
 # Polaris の目録用 PostgreSQL (CloudNativePG).
 # 接続先: polaris-postgres-rw.science-systems.svc:5432 / DB: polaris / ユーザー: polaris / スキーマ: polaris_schema
 # 手動で apply する (GitLab の PostgreSQL と同じく, データを持つため ArgoCD の管理外):
-#   kubectl apply -f deploy/sciense-systems/polaris/manifests/postgres-external-secrets.yaml
-#   kubectl apply -f deploy/sciense-systems/polaris/manifests/postgres-cluster.yaml
+#   kubectl apply -f deploy/science-systems/polaris/manifests/postgres-external-secrets.yaml
+#   kubectl apply -f deploy/science-systems/polaris/manifests/postgres-cluster.yaml
 #
 # - 保存するのは目録 (カタログ, 名前空間, テーブルと最新の metadata.json の場所, 権限) のみで数十 MB 程度.
 #   テーブルの中身は RustFS にある. 目録を失っても metadata.json から register_table で登録し直せる (権限の設定は失われる)

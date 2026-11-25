@@ -1,6 +1,6 @@
 # Polaris に Trino 用の principal (trino) と権限を作り, その認証情報を Secret trino-polaris に保存する Job.
 # Polaris のサーバーとカタログ arxiv ができてから, Trino の Application を同期する前に手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/trino/manifests/polaris-principal-job.yaml
+#   kubectl apply -f deploy/science-systems/trino/manifests/polaris-principal-job.yaml
 #   kubectl -n science-systems logs job/polaris-principal-trino
 # 冪等. 再実行する場合は Job を削除してから apply する.
 #

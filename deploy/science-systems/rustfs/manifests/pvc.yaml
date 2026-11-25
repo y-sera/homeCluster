@@ -2,7 +2,7 @@
 # Iceberg の warehouse (arXiv データセット約 15TB + 増分 約 1.2TB/年) を置く.
 # chart には作らせず事前に作成し, values の mode.standalone.existingClaim.dataClaim で参照する
 # (ArgoCD の同期や chart の削除でデータ領域が消えないようにするため. StorageClass も Retain).
-#   kubectl apply -f deploy/sciense-systems/rustfs/manifests/pvc.yaml
+#   kubectl apply -f deploy/science-systems/rustfs/manifests/pvc.yaml
 #
 # - qnap-iscsi は RWO. RustFS の Pod が載った worker に attach される (values の strategy は Recreate)
 # - Pod が載るノードに open-iscsi / multipath-tools と QNAP 用 multipath.conf が必要 (memo/qnap-trident_install_memo.md)

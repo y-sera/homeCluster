@@ -16,9 +16,9 @@ results/            統計の結果 (JSON)
 
 ## 実行
 ```bash
-kubectl apply -f deploy/sciense-systems/chunking-poc/dev-pod.yaml
+kubectl apply -f deploy/science-systems/chunking-poc/dev-pod.yaml
 kubectl -n science-systems exec chunking-poc -- bash -c 'python -m venv /work/venv && /work/venv/bin/pip install pyarrow==22.0.0 tokenizers==0.22.1 huggingface_hub'
-for f in deploy/sciense-systems/chunking-poc/src/*.py; do kubectl -n science-systems cp $f chunking-poc:/work/src/$(basename $f); done
+for f in deploy/science-systems/chunking-poc/src/*.py; do kubectl -n science-systems cp $f chunking-poc:/work/src/$(basename $f); done
 kubectl -n science-systems exec -it chunking-poc -- bash
 cd /work
 venv/bin/python src/process.py --input /src/sample/train-00000-of-00001.parquet --out out/sample    # HF の sample (991 件)
@@ -26,7 +26,7 @@ venv/bin/python src/make_sample.py --out sample10k.parquet --population populati
 venv/bin/python src/process.py --input sample10k.parquet --out out/s10k                             # 約 4.5 分
 venv/bin/python src/report.py --run out/s10k --population population.json
 ```
-検証が終わったら Pod と PVC を削除する (`kubectl delete -f deploy/sciense-systems/chunking-poc/dev-pod.yaml`).
+検証が終わったら Pod と PVC を削除する (`kubectl delete -f deploy/science-systems/chunking-poc/dev-pod.yaml`).
 
 ## 結果 (2026-11-22, normalizer v0.7 / chunker v0.2, 層別 9,868 件)
 | 項目 | 値 |

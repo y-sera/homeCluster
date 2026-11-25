@@ -12,7 +12,7 @@ spec:
   - repoURL: https://trinodb.github.io/charts
     helm:
       valueFiles:
-      - $configs/deploy/sciense-systems/trino/values/values.yaml
+      - $configs/deploy/science-systems/trino/values/values.yaml
       releaseName: trino
     chart: trino
     targetRevision: 1.45.0

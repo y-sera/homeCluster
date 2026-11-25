@@ -12,7 +12,7 @@ spec:
   - repoURL: https://charts.rustfs.com
     helm:
       valueFiles:
-      - $configs/deploy/sciense-systems/rustfs/values/values.yaml
+      - $configs/deploy/science-systems/rustfs/values/values.yaml
       releaseName: science-rustfs
     chart: rustfs
     targetRevision: 1.0.6

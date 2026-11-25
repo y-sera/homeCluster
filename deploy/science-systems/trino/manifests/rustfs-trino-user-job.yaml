@@ -1,7 +1,7 @@
 # RustFS に Trino 用のユーザー (trino) を作り, ポリシー arxiv-warehouse-rw を付ける Job.
-# ポリシーは Polaris 用に作成済みのもの (deploy/sciense-systems/polaris/manifests/rustfs-polaris-user-job.yaml) を使う.
+# ポリシーは Polaris 用に作成済みのもの (deploy/science-systems/polaris/manifests/rustfs-polaris-user-job.yaml) を使う.
 # trino-storage の Secret (manifests/trino-external-secrets.yaml) が SecretSynced になってから手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/trino/manifests/rustfs-trino-user-job.yaml
+#   kubectl apply -f deploy/science-systems/trino/manifests/rustfs-trino-user-job.yaml
 #   kubectl -n science-systems logs job/rustfs-trino-user
 # 再実行する場合は Job を削除してから apply する. 既存のユーザーはそのままにする
 # (パスワードを変える場合はユーザーを削除してから再実行する).

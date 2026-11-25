@@ -1,5 +1,5 @@
 # チャンク作成の検証 (設計メモ 5.7) の作業用 Pod と PVC. 手動で apply する (検証が終わったら削除する):
-#   kubectl apply -f deploy/sciense-systems/chunking-poc/dev-pod.yaml
+#   kubectl apply -f deploy/science-systems/chunking-poc/dev-pod.yaml
 #   kubectl -n science-systems exec -it chunking-poc -- bash
 # - 元データ (PVC arxiv-datasets, HF のリポジトリ構成) を /src に読み取り専用でマウントする
 #   → PVC arxiv-datasets は 2026-11-25 に削除した. 作り直す場合は /src の代わりに RustFS (s3://arxiv-warehouse/arxiv/<テーブル>/data/hf/) から読む

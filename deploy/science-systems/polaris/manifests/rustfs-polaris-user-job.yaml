@@ -1,6 +1,6 @@
 # RustFS に Polaris 用のユーザー (polaris) とポリシー (arxiv-warehouse-rw) を作る Job.
 # polaris-storage の Secret (manifests/polaris-external-secrets.yaml) が SecretSynced になってから手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/polaris/manifests/rustfs-polaris-user-job.yaml
+#   kubectl apply -f deploy/science-systems/polaris/manifests/rustfs-polaris-user-job.yaml
 #   kubectl -n science-systems logs job/rustfs-polaris-user
 # 再実行する場合は Job を削除してから apply する. 既存のユーザーとポリシーはそのままにする
 # (パスワードを変える場合はユーザーを削除してから再実行する).

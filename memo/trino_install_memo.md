@@ -19,8 +19,8 @@ Polaris (Iceberg REST カタログ, カタログ `arxiv`) の目録を使い, �
 ファイル
 ```
 applications/science-trino.yaml
-deploy/sciense-systems/trino/values/values.yaml       # カタログ, アクセス制御 (rules.json), リソースグループ, セッションの既定値, Ingress, Certificate (extraManifests)
-deploy/sciense-systems/trino/manifests/
+deploy/science-systems/trino/values/values.yaml       # カタログ, アクセス制御 (rules.json), リソースグループ, セッションの既定値, Ingress, Certificate (extraManifests)
+deploy/science-systems/trino/manifests/
   trino-external-secrets.yaml   # trino-password (password.db), trino-internal (共有鍵), trino-storage (RustFS), trino-clients (平文のパスワード)
   rustfs-trino-user-job.yaml    # RustFS のユーザー trino
   polaris-principal-job.yaml    # Polaris の principal trino と権限. 認証情報を Secret trino-polaris に書く
@@ -39,7 +39,7 @@ client_id を Polaris が払い出すため, `polaris-principal-job.yaml` が作
 
 ## 導入手順
 ```bash
-M=deploy/sciense-systems/trino/manifests
+M=deploy/science-systems/trino/manifests
 # 1. Secret (4 つとも SecretSynced)
 kubectl apply -f $M/trino-external-secrets.yaml
 kubectl -n science-systems get es trino-password trino-internal trino-storage trino-clients

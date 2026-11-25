@@ -2,7 +2,7 @@
 # データセットの SHA256SUMS (HF の LFS の sha256) と照合する.
 # 完了済み (2026-11-25 03:23 UTC, OK: all 3745 files match). その後 PVC arxiv-datasets を削除した.
 # コピーの Job (arxiv-migrate-copy) が完了してから手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-migrate-verify-job.yaml
+#   kubectl apply -f deploy/science-systems/manifests/arxiv-migrate-verify-job.yaml
 #   kubectl -n science-systems logs -f job/arxiv-migrate-verify
 # 一致すれば "OK: all N files match" を出力して成功する. 不一致・欠落があれば差分を出力して失敗する.
 # 結果は s3://arxiv-raw/hf/arxiv-complete/_verify/ に保存する.

@@ -17,8 +17,8 @@ Polaris は目録 (カタログ, 名前空間, テーブルと最新の metadata
 ファイル
 ```
 applications/science-polaris.yaml
-deploy/sciense-systems/polaris/values/values.yaml
-deploy/sciense-systems/polaris/manifests/
+deploy/science-systems/polaris/values/values.yaml
+deploy/science-systems/polaris/manifests/
   postgres-external-secrets.yaml   # polaris-postgres-app (CNPG 用, basic-auth), polaris-persistence (username / password / jdbcUrl)
   polaris-external-secrets.yaml    # polaris-token-keys (RSA), polaris-root, polaris-storage
   postgres-cluster.yaml            # CNPG Cluster + PodMonitor
@@ -37,7 +37,7 @@ Vault
 
 ## 導入手順
 ```bash
-M=deploy/sciense-systems/polaris/manifests
+M=deploy/science-systems/polaris/manifests
 # 1. Secret (5 つとも SecretSynced になること)
 kubectl apply -f $M/postgres-external-secrets.yaml -f $M/polaris-external-secrets.yaml
 kubectl -n science-systems get es

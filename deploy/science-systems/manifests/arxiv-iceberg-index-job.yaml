@@ -1,5 +1,5 @@
 # 手順 5b (索引系): metadata / versions / files を Iceberg テーブルに書き直す Job.
-#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-iceberg-index-job.yaml
+#   kubectl apply -f deploy/science-systems/manifests/arxiv-iceberg-index-job.yaml
 #   kubectl -n science-systems logs -f job/arxiv-iceberg-index -c stage   # 1. 作業用の場所へコピー
 #   kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build   # 2. テーブル作成
 # 成功すると "ALL OK" を出力する. 再実行する場合は Job を削除してから apply する (作成済みのテーブルは飛ばす).

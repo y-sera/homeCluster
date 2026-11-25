@@ -2,7 +2,7 @@
 # PostgreSQL のスキーマ polaris_schema に Polaris のテーブルを作り, realm と root の認証情報を登録する.
 # PostgreSQL (polaris-postgres) が起動し, Secret polaris-persistence / polaris-root が SecretSynced になってから,
 # Polaris のサーバーより先に手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/polaris/manifests/bootstrap-job.yaml
+#   kubectl apply -f deploy/science-systems/polaris/manifests/bootstrap-job.yaml
 #   kubectl -n science-systems logs job/polaris-bootstrap
 # bootstrap は冪等 (初期化済みの realm には何もしない). 再実行する場合は Job を削除してから apply する.
 # - admin tool のバージョンはサーバー (chart の image.tag) と揃える

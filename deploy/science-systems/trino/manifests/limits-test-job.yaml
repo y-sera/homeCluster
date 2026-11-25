@@ -1,5 +1,5 @@
 # Trino の mcp_reader の上限の確認 Job (読み取りのみ. テーブルは作らない).
-#   kubectl apply -f deploy/sciense-systems/trino/manifests/limits-test-job.yaml
+#   kubectl apply -f deploy/science-systems/trino/manifests/limits-test-job.yaml
 #   kubectl -n science-systems logs -f job/trino-limits-test
 # 再実行する場合は Job を削除してから apply する. イメージには grep / sed がないため bash の組み込み機能のみ使う.
 # 確認する内容 (values.yaml の resourceGroups / sessionProperties / accessControl):

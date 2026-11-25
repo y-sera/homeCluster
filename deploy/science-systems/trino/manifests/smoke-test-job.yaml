@@ -1,5 +1,5 @@
 # Trino の動作確認 Job (Ingress 経由の HTTPS + パスワード認証, Iceberg の読み書き, mcp_reader の権限).
-#   kubectl apply -f deploy/sciense-systems/trino/manifests/smoke-test-job.yaml
+#   kubectl apply -f deploy/science-systems/trino/manifests/smoke-test-job.yaml
 #   kubectl -n science-systems logs job/trino-smoke-test
 # 再実行する場合は Job を削除してから apply する. イメージには grep / sed がないため bash の組み込み機能のみ使う.
 # - 確認用のテーブル iceberg.smoke_test.t と iceberg.arxiv.latex (mcp_reader の content 列の拒否の確認用) を作って削除する.

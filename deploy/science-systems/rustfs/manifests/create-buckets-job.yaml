@@ -1,6 +1,6 @@
 # science-systems 用のバケットを RustFS に作成する Job (冪等. 既存バケットはスキップする).
 # RustFS の起動後に手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/rustfs/manifests/create-buckets-job.yaml
+#   kubectl apply -f deploy/science-systems/rustfs/manifests/create-buckets-job.yaml
 #   kubectl -n science-systems logs job/science-rustfs-create-buckets
 # 再実行する場合は Job を削除してから apply する.
 #

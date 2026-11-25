@@ -21,7 +21,7 @@ HF のデータセット (secemp9/arxiv-complete) を Iceberg テーブルにす
 
 ## 手順
 ```bash
-M=deploy/sciense-systems/manifests
+M=deploy/science-systems/manifests
 # 1. 中身系 (add_files. フッターを読むだけで 30〜45 分程度. 確認の Job と並行してよい)
 kubectl apply -f $M/arxiv-iceberg-content-job.yaml
 kubectl -n science-systems logs -f job/arxiv-iceberg-content            # ALL OK

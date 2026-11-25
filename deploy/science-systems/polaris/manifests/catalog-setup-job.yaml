@@ -1,6 +1,6 @@
 # Polaris にカタログ arxiv と名前空間 arxiv を作る Job. 最後にテーブルの作成・削除で RustFS への書き込みを確認する.
 # Polaris のサーバーが起動してから手動で apply する:
-#   kubectl apply -f deploy/sciense-systems/polaris/manifests/catalog-setup-job.yaml
+#   kubectl apply -f deploy/science-systems/polaris/manifests/catalog-setup-job.yaml
 #   kubectl -n science-systems logs job/polaris-catalog-setup
 # 冪等 (既存のカタログ・名前空間はそのままにする). 再実行する場合は Job を削除してから apply する.
 #

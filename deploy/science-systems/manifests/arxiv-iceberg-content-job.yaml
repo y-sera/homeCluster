@@ -1,5 +1,5 @@
 # 手順 5b (中身系): コピー済みの parquet を書き直さずに Iceberg テーブルとして登録する Job.
-#   kubectl apply -f deploy/sciense-systems/manifests/arxiv-iceberg-content-job.yaml
+#   kubectl apply -f deploy/science-systems/manifests/arxiv-iceberg-content-job.yaml
 #   kubectl -n science-systems logs -f job/arxiv-iceberg-content
 # 成功すると "ALL OK" を出力する. 再実行する場合は Job を削除してから apply する (登録済みのテーブルは飛ばすため何度実行してもよい).
 #
