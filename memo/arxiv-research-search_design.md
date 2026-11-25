@@ -335,7 +335,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 ### 全体
 - [x] ディレクトリ名の綴りを直す (2026-11-26. `deploy/sciense-systems` → `deploy/science-systems`. Application 3 つの valueFiles も変更)
 - [x] ~~science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする~~ (2026-11-26. 使う Job がなくなったため hf-downloader-job と一緒に削除. Vault のキーは llm-system が使う)
-- [ ] AWS の認証情報 (requester-pays 用) を Vault に登録する
+- [x] AWS の認証情報 (requester-pays 用) を Vault に登録する (2026-11-26. IAM ユーザー arxiv-requester-pays, arxiv の pdf/ と src/ の一覧と読み取りのみ. Vault eso/arxiv-aws → Secret arxiv-aws. 拒否も確認済み)
 - [ ] 埋め込みモデルを決める (評価で)
 - [ ] MCP ホスト (Open WebUI) から使うローカル LLM の提供方法を決める (vLLM のツール呼び出し対応の確認)
 - [ ] エージェントのサンドボックスの設計メモを書く
