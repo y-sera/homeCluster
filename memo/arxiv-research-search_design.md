@@ -306,7 +306,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] CNPG の PostgreSQL (polaris-postgres, 18.7), RustFS のユーザー polaris (arxiv-warehouse のみ)
 - [x] realm POLARIS の初期化, Polaris 1.9.0 (ArgoCD science-polaris)
 - [x] カタログ arxiv (stsUnavailable: クライアントは各自の RustFS の認証情報を使う), 名前空間 arxiv, テーブル作成の確認
-- [ ] PostgreSQL のバックアップ (任意. 目録は metadata.json から登録し直せる)
+- [x] PostgreSQL のバックアップ (2026-11-26. 毎日 03:30 JST の pg_dump を RustFS の science-backups へ, 30 日保持. 復元を確認済み. `memo/polaris_install_memo.md`)
 
 ### 手順 3: Trino
 - [x] Trino 484 (ArgoCD science-trino, coordinator 1 台が worker を兼ねる), カタログ iceberg (Polaris の principal trino, RustFS のユーザー trino)
