@@ -26,7 +26,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 検索の対象は各論文の最新版とする. 過去の版は閲覧 (版を指定した `read_section`) と SQL で扱う
 
 ## 3. 現状のデータ (2026-11-18 時点)
-- PVC `science-systems/arxiv-datasets` (qnap-smb, RWX, 17Ti) に HF のリポジトリ構成のまま約 15TB
+- PVC `science-systems/arxiv-datasets` (qnap-smb, RWX, 17Ti) に HF のリポジトリ構成のまま約 15TB (RustFS への移行後, 2026-11-25 に削除)
   (取得 Job: `deploy/sciense-systems/manifests/hf-downloader-job.yaml`)
 - スナップショット: メタデータ 2026-08-30 (OAI-PMH arXivRaw), ファイル 2026-09-05. データセット側の自動更新はない
 
@@ -34,7 +34,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 |---|---|---|---|---|
 | metadata | 論文 | 3,148,796 | 1.6G | paper_id, title, authors, abstract, categories, primary_category, license, doi, ... |
 | versions | 論文 × 版 | 5,030,612 | 257M | paper_id, version, version_date, has_pdf, pdf_sha256, is_latest_version, ... |
-| files | ファイル (中身なし) | 54,597,326 | 2.3G | paper_id, version, kind, source, path, size, sha256, stored_as, ... |
+| files (Iceberg では paper_files) | ファイル (中身なし) | 54,597,326 | 2.3G | paper_id, version, kind, source, path, size, sha256, stored_as, ... |
 | paper_text | 論文の TeX 本文 | 2,856,227 | 66G | paper_id, text (large_string), main_file, resolution, ... |
 | latex | TeX 関連ファイル | 12,348,082 | 150G | paper_id, path, ext, size, sha256, content (large_binary) |
 | source / pdf / ps | ファイルの中身 | 4,737万 / 497万 / 224万 | 6.0T / 7.9T / 634G | paper_id, version, kind, source, path, size, sha256, content |
@@ -251,12 +251,12 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 手順 | 内容 | 状態 |
 |---|---|---|
 | 1 | RustFS を構築 | 完了 (2026-11-21) |
-| 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | コピーは完了 (2026-11-23). 確認は実行中 (source まで 1,626 ファイル一致. pdf は 2026-11-24 開始, 2026-11-25 完了見込み) |
+| 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 完了 (2026-11-25. 3,745 ファイルの sha256 が一致. SMB の PVC は削除) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
 | 3 | Trino (`mcp_reader` の制限を含む) | 完了 (2026-11-22. `memo/trino_install_memo.md`) |
 | 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/sciense-systems/chunking-poc/README.md`). 評価データは未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
-| 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 中身系 5 テーブルは登録済み (2026-11-23). 索引系は確認の完了後 (`memo/arxiv_iceberg_tables_memo.md`) |
+| 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 完了 (2026-11-25. 8 テーブル. `memo/arxiv_iceberg_tables_memo.md`) |
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
@@ -282,19 +282,19 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] Application `science-rustfs` を登録・同期し, Pod が qnap-vm で起動することを確認する
 - [x] バケット作成 Job (arxiv-warehouse, arxiv-raw) を実行する
 - [x] 確認: `aws s3 ls`, qnap-vm で `/dev/mapper/mpatha` (QNAP iSCSI Storage 18T) が /data にマウントされていること
-- [ ] 確認: qnap-vm で `sudo multipath -ll` が `features='1 queue_if_no_path'` であること, コンソール (port-forward)
+- [x] ~~確認: qnap-vm で `sudo multipath -ll` が `features='1 queue_if_no_path'` であること~~ (qnap-vm を廃止したため不要. RustFS は worker2 で動く), コンソール (port-forward)
 
 ### 手順 5a: コピーと確認
 - [x] コピーの Job (arxiv-migrate-copy) を完了させる (2026-11-23. 約 45 時間, エラーなし. arxiv-raw 13 個 4.07GiB, arxiv-warehouse 3,736 個 14.6TiB)
-- [ ] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する (2026-11-23 開始. 約 110MiB/s. 2026-11-24 時点で pdf 以外の 1,626 ファイルが一致)
-- [ ] SMB の PVC (arxiv-datasets) の削除は手順 5b の検証後
+- [x] 確認の Job (arxiv-migrate-verify) で 3,745 ファイルの sha256 が一致することを確認する (2026-11-23 12:49 〜 2026-11-25 03:23 UTC, 約 38 時間. OK: all 3745 files match)
+- [x] SMB の PVC (arxiv-datasets) を削除する (2026-11-25. PV の回収ポリシーを Delete に変えてから削除し, QNAP の共有フォルダも Trident で削除)
 
 ### 手順 5b: Iceberg テーブル
 - [x] Trino で add_files を有効にする (`iceberg.add-files-procedure.enabled=true`)
 - [x] add_files の動作確認 (フィールド ID のない parquet は name mapping で読める, 統計で読み飛ばせる, timestamp[ms] を読める)
 - [x] 中身系 5 テーブルを add_files で登録する (Job arxiv-iceberg-content. 確認の Job と並行. 2026-11-23 完了, 62 分, 全テーブル OK)
-- [ ] 索引系 3 テーブルを CTAS で書き直す (Job arxiv-iceberg-index. 確認の Job の完了後)
-- [ ] 作業用の名前空間 arxiv_staging のテーブルとファイルを削除する
+- [x] 索引系 3 テーブルを CTAS で書き直す (Job arxiv-iceberg-index. 2026-11-25 完了, 全テーブルの行数が一致. files は paper_files に改名)
+- [x] 作業用の名前空間 arxiv_staging のテーブルとファイルを削除する (2026-11-25. unregister_table, DROP SCHEMA, s3://arxiv-warehouse/arxiv_staging/ を削除)
 
 ### qnap-vm の廃止 (2026-11-22 完了)
 - [x] RustFS の values から nodeSelector / tolerations を削除して同期し, worker で起動することを確認する
@@ -377,6 +377,11 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - 索引系は CTAS で書き直す. metadata は投稿年 (`year(first_version_date)`) で分割, versions / files は分割なし (小さいため). すべて paper_id で並べる
 - 識別キーは Iceberg の identifier fields として設定しない (Trino で設定できない). MERGE の ON 句で指定する
 - add_files で登録したテーブルは OPTIMIZE + expire_snapshots をしない (コピーした parquet が消えるため)
+
+### 2026-11-25 (手順 5a, 5b の完了)
+- 索引系の files は Iceberg では `paper_files` とする. Trino は Iceberg のメタデータテーブルの種類 (files / history / snapshots など) と
+  同じ名前のテーブルを「名前空間の $files」と解釈し, 作成も参照もできないため. 列名と中身は元の files と同じ
+- 正本のテーブルは metadata / versions / paper_files / paper_text / latex / source / pdf / ps の 8 つ (名前空間 arxiv)
 
 ### 外部レビューで採らなかった案と理由
 | 案 | 理由 |
