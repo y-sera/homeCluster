@@ -27,7 +27,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 
 ## 3. 現状のデータ (2026-11-18 時点)
 - PVC `science-systems/arxiv-datasets` (qnap-smb, RWX, 17Ti) に HF のリポジトリ構成のまま約 15TB (RustFS への移行後, 2026-11-25 に削除)
-  (取得 Job: `deploy/sciense-systems/manifests/hf-downloader-job.yaml`)
+  (取得 Job: `deploy/sciense-systems/manifests/hf-downloader-job.yaml`. PVC の削除に合わせて 2026-11-26 に削除)
 - スナップショット: メタデータ 2026-08-30 (OAI-PMH arXivRaw), ファイル 2026-09-05. データセット側の自動更新はない
 
 | config | 1 行 | 行数 | parquet | 主な列 |
@@ -334,7 +334,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 
 ### 全体
 - [ ] `deploy/sciense-systems` のディレクトリ名の綴り (science) を直すか決める
-- [ ] science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする
+- [x] ~~science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする~~ (2026-11-26. 使う Job がなくなったため hf-downloader-job と一緒に削除. Vault のキーは llm-system が使う)
 - [ ] AWS の認証情報 (requester-pays 用) を Vault に登録する
 - [ ] 埋め込みモデルを決める (評価で)
 - [ ] MCP ホスト (Open WebUI) から使うローカル LLM の提供方法を決める (vLLM のツール呼び出し対応の確認)
