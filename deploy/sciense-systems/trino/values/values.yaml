@@ -37,6 +37,13 @@ additionalConfigProperties:
 # Ingress で TLS を終端するため, X-Forwarded-Proto: https の要求を HTTPS として扱う
 # (HTTP で直接 Service に来た要求ではパスワード認証を受け付けない)
 - http-server.process-forwarded=true
+# メトリクス (/metrics) の収集. Prometheus は Pod に HTTP で直接取りに来るため (パスワード認証は HTTPS が必須),
+# 管理用のエンドポイント (/metrics など) に限り認証なしの要求をユーザー prometheus として扱う.
+# prometheus に許すのは system_information の read のみ (accessControl). SQL の問い合わせには使えない
+- management.user=prometheus
+# JVM のメトリクス (ヒープ, GC, スレッド) も出す (Trino 自身の MBean は既定で出る)
+# (オブジェクト名の区切りは |)
+- openmetrics.jmx-object-names=java.lang:type=Memory|java.lang:type=GarbageCollector,name=*|java.lang:type=Threading
 
 auth:
   # キー password.db (manifests/trino-external-secrets.yaml)
@@ -90,6 +97,7 @@ catalogs:
 # ファイルベースのアクセス制御 (/etc/trino/access-control/rules.json. 60 秒ごとに読み直す).
 # 規則は上から順に評価され, 最初に一致したものが使われる. どれにも一致しなければ拒否する.
 # - admin: すべて (テーブルの作成, add_files / unregister_table などのプロシージャ. procedures で明示的に許可が必要)
+# - prometheus: メトリクスの収集のみ (system_information の read. management.user のため認証なしで使われる)
 # - mcp_reader: カタログ iceberg の名前空間 arxiv の SELECT のみ. pdf / source / ps / latex の content 列
 #   (論文の本体のバイナリ) は拒否する (SELECT * も失敗するため, 列を指定して問い合わせる)
 #   セッションプロパティの変更 (SET SESSION) は admin のみ (mcp_reader の上限を変更させないため)
@@ -123,7 +131,8 @@ accessControl:
           {"user": "admin", "privileges": ["EXECUTE"]}
         ],
         "system_information": [
-          {"user": "admin", "allow": ["read", "write"]}
+          {"user": "admin", "allow": ["read", "write"]},
+          {"user": "prometheus", "allow": ["read"]}
         ],
         "system_session_properties": [
           {"user": "admin", "allow": true}
@@ -184,6 +193,21 @@ sessionProperties:
         }
       }
     ]
+
+# メトリクス: kube-prometheus-stack (release: prometheus) が coordinator の /metrics (OpenMetrics) を収集する.
+# 認証なし (management.user=prometheus). worker は使わない (server.workers: 0)
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+  # chart が生成する endpoint は Basic 認証 (パスワードが空でも) を付けるため, 認証なしの endpoint を自分で書く
+  endpoints:
+  - port: http
+    path: /metrics
+    scheme: http
+    interval: 30s
+  worker:
+    enabled: false
 
 ingress:
   enabled: true
