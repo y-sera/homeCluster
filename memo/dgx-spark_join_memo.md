@@ -66,6 +66,23 @@ EOF
 sysctl --system
 ```
 
+### inotify の上限 / needrestart の除外 (全ノード共通. memo/cluster_install_memo.md の「全ノード共通の設定」)
+既定の inotify の上限 (max_user_instances 128) では containerd の再起動時に CRI が起動できずノードが NotReady になる.
+DGX OS にも needrestart が入っており, apt で更新すると containerd / kubelet を自動で再起動するため対象から外す.
+ファイル名は DGX 独自の設定 (/etc/needrestart/conf.d/50-dgx-dashboard.conf など) と重ならない.
+```
+cat <<'EOF' > /etc/sysctl.d/99-kubernetes-inotify.conf
+fs.inotify.max_user_instances = 8192
+fs.inotify.max_user_watches = 524288
+EOF
+sysctl --system
+
+cat <<'EOF' > /etc/needrestart/conf.d/90-kubernetes.conf
+$nrconf{override_rc}{qr(^containerd\.service$)} = 0;
+$nrconf{override_rc}{qr(^kubelet\.service$)} = 0;
+EOF
+```
+
 ### k8s 外で GPU を使うサービスの停止 (方針: GPU 利用は k8s 経由に統一)
 kubelet は k8s 外のコンテナ/プロセスを把握できず, GPU やユニファイドメモリ (128GB) の取り合い,
 image GC 対象外のイメージによるディスク逼迫の原因になる.
@@ -177,7 +194,7 @@ curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearm
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
 apt-get update
 apt-get install -y kubelet=1.35.4-1.1 kubeadm=1.35.4-1.1 kubectl=1.35.4-1.1
-apt-mark hold kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl containerd.io   # containerd.io も apt upgrade で上がらないようにする
 ```
 join 前の kubelet は `/var/lib/kubelet/config.yaml` が無いため再起動を繰り返すが正常.
 

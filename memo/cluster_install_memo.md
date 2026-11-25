@@ -104,6 +104,35 @@ EOF
 sudo sysctl --system
 ```
 
+全ノード共通の設定 (2026-11-24 の worker3 NotReady の再発防止. 2026-11-26 に全 8 ノードへ適用済み)
+- inotify の上限: 既定の max_user_instances 128 では, containerd を再起動したときに CRI プラグインが
+  起動できず (inotify の確保に失敗), kubelet が CRI に接続できずノードが NotReady になる
+- needrestart: apt でライブラリを更新すると containerd / kubelet を自動で再起動するため, 対象から外す
+  (更新後の再起動は, ノードを drain してから手作業で行う)
+- hold: apt upgrade のついでに Kubernetes / containerd が上がらないようにする.
+  バージョンアップのときは `sudo apt-mark unhold <パッケージ>` で外してから上げ, 終わったら hold し直す
+```
+sudo bash <<'SCRIPT'
+cat <<'EOF' > /etc/sysctl.d/99-kubernetes-inotify.conf
+fs.inotify.max_user_instances = 8192
+fs.inotify.max_user_watches = 524288
+EOF
+sysctl --system
+
+cat <<'EOF' > /etc/needrestart/conf.d/90-kubernetes.conf
+$nrconf{override_rc}{qr(^containerd\.service$)} = 0;
+$nrconf{override_rc}{qr(^kubelet\.service$)} = 0;
+EOF
+for p in kubeadm kubelet kubectl containerd.io; do
+  dpkg -s "$p" >/dev/null 2>&1 && apt-mark hold "$p"
+done
+SCRIPT
+
+# 確認
+sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+apt-mark showhold
+```
+
 コントロールプレーンのみ
 etcd-clientのインストール
 ```
