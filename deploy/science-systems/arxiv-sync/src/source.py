@@ -279,12 +279,13 @@ class Writer:
                     if ext in LATEX_EXT:
                         lat.append({"paper_id": pid, "path": path, "ext": ext, "size": len(data), "sha256": sha,
                                     "content": data})
+            # 中身は 2000 行ずつ arrow にして書く (全部を一度に arrow にすると中身の 2 倍のメモリが要る)
             base = f"sync/{self.rid}/{self.part:05d}"
             # 中身の列: 行グループ 200 行 (HF と同程度)
             add_files(tr, self.fs, "source", f"arxiv/source/data/{base}",
-                      [pa.Table.from_pylist(src[i:i + 2000], SOURCE_SCHEMA) for i in range(0, len(src), 2000)], 200)
+                      (pa.Table.from_pylist(src[i:i + 2000], SOURCE_SCHEMA) for i in range(0, len(src), 2000)), 200)
             add_files(tr, self.fs, "latex", f"arxiv/latex/data/{base}",
-                      [pa.Table.from_pylist(lat[i:i + 5000], LATEX_SCHEMA) for i in range(0, len(lat), 5000)], 200)
+                      (pa.Table.from_pylist(lat[i:i + 5000], LATEX_SCHEMA) for i in range(0, len(lat), 5000)), 200)
             add_files(tr, self.fs, "paper_files", f"arxiv/paper_files/data/{base}-src",
                       [pa.Table.from_pylist(meta, FILES_SCHEMA)], 100000)
             insert_values(tr, "iceberg.arxiv_sync.src_payloads",
@@ -313,7 +314,7 @@ def main():
     ap.add_argument("--whole-ratio", type=float, default=0.3)
     ap.add_argument("--max-gb", type=float, default=200, help="1 回の取得量の上限 (GB)")
     ap.add_argument("--workers", type=int, default=6)
-    ap.add_argument("--flush-gb", type=float, default=2.0)
+    ap.add_argument("--flush-gb", type=float, default=1.0)
     ap.add_argument("--dry-run", action="store_true", help="対象の tar と論文の数を表示するだけ")
     a = ap.parse_args()
 
