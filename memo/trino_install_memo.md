@@ -14,6 +14,7 @@ Polaris (Iceberg REST カタログ, カタログ `arxiv`) の目録を使い, �
 | RustFS のユーザー | `trino` (ポリシー `arxiv-warehouse-rw`. Polaris と共用. arxiv-raw は不可) |
 | 認証 | パスワードファイル. ユーザー `admin` (すべて), `mcp_reader` (読み取りのみ) |
 | mcp_reader の上限 | リソースグループ `root.mcp` (同時 3 件, 待ち 20 件, メモリ 35%), 1 件あたり実行 60 秒 / 待ちを含め 120 秒 / 読み込み 8GB / メモリ 800MB. SET SESSION は admin のみ |
+| メトリクス | ServiceMonitor `trino` (release: prometheus) が coordinator の `/metrics` (OpenMetrics) を 30 秒ごとに認証なしで収集. `management.user=prometheus` で管理用のエンドポイントのみ認証なしの要求をユーザー prometheus として扱い, prometheus には system_information の read のみ許す. JVM (java.lang の Memory / GarbageCollector / Threading) も出す |
 
 ファイル
 ```
@@ -96,4 +97,9 @@ Python (`trino` パッケージ): `trino.dbapi.connect(host="trino.cluster.orene
 - `fs.native-s3.enabled` は Trino 484 で `fs.s3.enabled` に改名された
 - Trino のイメージには grep / sed がない (Job のスクリプトは bash の組み込み機能のみ使う)
 - 起動時のログの設定値は秘密情報が `[REDACTED]` になる (共有鍵, S3 の secret key, OAuth2 の credential. 出現 0 件を確認済み)
-- メトリクス (ServiceMonitor) は未設定. `/metrics` もパスワード認証が必要なため, 収集用のユーザーと system_information の規則が要る
+- メトリクス: Prometheus は Pod に HTTP で直接取りに来るが, パスワード認証は HTTPS が必須. そのため収集用のパスワードは作らず
+  `management.user=prometheus` で認証なしにした (クラスタ内から Pod の 8080 番に届けば, 誰でも /metrics などの管理用の読み取りができる.
+  SQL (/v1/statement) は 403). chart の serviceMonitor.openMetrics は空のパスワードでも Basic 認証を付けるため, endpoints を自分で書く
+  (chart が作る Secret trino-metrics-auth-coordinator は使われない).
+  メトリクス名: Trino 自身は `trino_execution_name_QueryManager_RunningQueries`, `trino_execution_resourcegroups_...` など,
+  JVM は `JMX_java_lang_TYPE_Memory_ATTRIBUTE_HeapMemoryUsage_used` の形. jmx-object-names の区切りは `|`
