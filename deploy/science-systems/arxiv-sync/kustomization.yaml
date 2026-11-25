@@ -1,0 +1,18 @@
+# arXiv の最新化ジョブ (OAI-PMH の日次取り込み, PDF / ソースの取り込み).
+#   kubectl apply -k deploy/science-systems/arxiv-sync
+# コードは src/ を ConfigMap にして /app にマウントする (名前に内容のハッシュが付くため, 変更すると CronJob も更新される)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: science-systems
+resources:
+- manifests/oai-cronjob.yaml
+- manifests/pdf-cronjob.yaml
+- manifests/source-cronjob.yaml
+configMapGenerator:
+- name: arxiv-sync-src
+  files:
+  - src/requirements.txt
+  - src/common.py
+  - src/oai.py
+  - src/pdf.py
+  - src/source.py

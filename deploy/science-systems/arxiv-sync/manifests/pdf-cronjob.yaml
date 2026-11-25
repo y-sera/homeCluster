@@ -1,0 +1,84 @@
+# PDF を GCS の公開ミラー (gs://arxiv-dataset) から取得して iceberg.arxiv.pdf / paper_files に追加する CronJob (毎週日曜 09:00 JST).
+#   kubectl -n science-systems create job arxiv-pdf-manual --from=cronjob/arxiv-pdf
+# - versions で PDF のない版を取得する (OAI の取り込みで追加された版). ミラーは数日〜数週間遅れるため, ない版は次回に再び試す
+# - 費用なし (GCS の公開バケット. 認証不要)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: arxiv-pdf
+  namespace: science-systems
+spec:
+  schedule: "0 9 * * 0"
+  timeZone: Asia/Tokyo
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          # Service のリンク用の環境変数 (TRINO_PORT=tcp://... など) を入れない
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: pdf
+            image: python:3.14.10-slim-trixie
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            env:
+            - name: HOME
+              value: /tmp
+            - name: PYTHONPATH
+              value: /tmp/py:/app
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TRINO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-clients
+                  key: admin-password
+            # arxiv-raw (manifest の保存) と arxiv-warehouse の両方を使うため RustFS の root
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_ACCESS_KEY
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_SECRET_KEY
+            command:
+            - sh
+            - -ec
+            - |
+              pip install --quiet --no-cache-dir --disable-pip-version-check --target /tmp/py -r /app/requirements.txt
+              exec python /app/pdf.py
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                memory: 6Gi
+            volumeMounts:
+            - name: app
+              mountPath: /app
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: app
+            configMap:
+              name: arxiv-sync-src
+          - name: tmp
+            emptyDir: {}

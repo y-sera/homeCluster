@@ -1,0 +1,88 @@
+# OAI-PMH (arXivRaw) の差分を iceberg.arxiv.metadata / versions に取り込む CronJob (毎日 06:00 JST).
+# kustomization.yaml でまとめて apply する:
+#   kubectl apply -k deploy/science-systems/arxiv-sync
+# すぐに実行する / 初回の追い付き:
+#   kubectl -n science-systems create job arxiv-oai-manual --from=cronjob/arxiv-oai
+#   kubectl -n science-systems logs -f job/arxiv-oai-manual
+# - arXiv の OAI-PMH は毎日 (米国東部の夜) 更新される. 1 ページ約 1,300 件, ページの間は 5 秒待つ
+# - 応答の XML は s3://arxiv-raw/oai/arXivRaw/<run>/ に残す
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: arxiv-oai
+  namespace: science-systems
+spec:
+  schedule: "0 6 * * *"
+  timeZone: Asia/Tokyo
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          # Service のリンク用の環境変数 (TRINO_PORT=tcp://... など) を入れない
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: oai
+            image: python:3.14.10-slim-trixie
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            env:
+            - name: HOME
+              value: /tmp
+            - name: PYTHONPATH
+              value: /tmp/py:/app
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TRINO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-clients
+                  key: admin-password
+            # arxiv-raw (応答の保存) と arxiv-warehouse (一時テーブル) の両方を使うため RustFS の root
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_ACCESS_KEY
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_SECRET_KEY
+            command:
+            - sh
+            - -ec
+            - |
+              pip install --quiet --no-cache-dir --disable-pip-version-check --target /tmp/py -r /app/requirements.txt
+              exec python /app/oai.py
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                memory: 3Gi
+            volumeMounts:
+            - name: app
+              mountPath: /app
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: app
+            configMap:
+              name: arxiv-sync-src
+          - name: tmp
+            emptyDir: {}
