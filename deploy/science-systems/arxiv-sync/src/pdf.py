@@ -6,8 +6,8 @@
                 旧形式 hep-th/9901001 v1 → arxiv/hep-th/pdf/9901/9901001v1.pdf (HF のデータセットと同じ)
   ミラーは arXiv より数日〜数週間遅れる. 404 の版は次回に再び試す
 - 取得した中身は GCS の MD5 (x-goog-hash) と照合し, sha256 を計算する
-- 書き込み: parquet (行グループ 50 行, 1 ファイル約 1,000 行) を s3://arxiv-warehouse/arxiv/pdf/data/sync/<run>/ に置き,
-  ファイルごとに add_files で pdf と paper_files に追加する (既存の parquet は書き換えない)
+- 書き込み: parquet (行グループ 50 行. 届いた順に書き出しメモリを抑える. 1 ファイル約 1,000 行) を
+  s3://arxiv-warehouse/arxiv/pdf/data/sync/<run>/ に置き, ファイルごとに add_files で pdf と paper_files に追加する (既存の parquet は書き換えない)
 - 最後 (と開始時) に versions の has_pdf / pdf_sha256 / is_latest_pdf を paper_files から合わせる (途中で止まっても次回に直る)
 """
 
@@ -127,34 +127,52 @@ def main():
     prefix_pdf = f"arxiv/pdf/data/sync/{rid}"
     prefix_files = f"arxiv/paper_files/data/sync/{rid}"
     stats = {"ok": 0, "404": 0, "error": 0, "bytes": 0}
-    part = 0
-    rows = []
+    # 中身は 50 行 (行グループ) ごとにすぐ書き出し, メモリには 50 行分しか持たない. 1 ファイル --rows-per-file 行で閉じて add_files する
+    st = {"part": 0, "writer": None, "buf": [], "meta": [], "rows": 0}
 
-    def flush():
-        nonlocal part, rows
-        if not rows:
+    def path_of(part):
+        return f"{WAREHOUSE}/{prefix_pdf}/part-{part:05d}.parquet"
+
+    def write_group():
+        if not st["buf"]:
             return
-        rows.sort(key=lambda r: (r["paper_id"], r["version"]))
-        # 中身の列が大きいため, 行グループ (50 行) ごとに書き出してメモリを抑える
-        path = f"{WAREHOUSE}/{prefix_pdf}/part-{part:05d}.parquet"
-        with pq.ParquetWriter(path, PDF_SCHEMA, filesystem=fs, compression="zstd") as w:
-            for i in range(0, len(rows), 50):
-                w.write_table(pa.Table.from_pylist(rows[i:i + 50], PDF_SCHEMA))
-        tr.q(f"ALTER TABLE iceberg.arxiv.pdf EXECUTE add_files(location => 's3://{WAREHOUSE}/{prefix_pdf}/part-{part:05d}.parquet', format => 'PARQUET')")
-        meta = [{k: r[k] for k in ("paper_id", "version", "kind", "source", "path", "size", "sha256")} |
-                {"path_encoding": "utf8", "stored_as": None, "stored_sha256": None, "stored_size": None} for r in rows]
+        if st["writer"] is None:
+            st["writer"] = pq.ParquetWriter(path_of(st["part"]), PDF_SCHEMA, filesystem=fs, compression="zstd")
+        st["buf"].sort(key=lambda r: (r["paper_id"], r["version"]))
+        st["writer"].write_table(pa.Table.from_pylist(st["buf"], PDF_SCHEMA))
+        st["buf"] = []
+
+    def close_file():
+        write_group()
+        if st["writer"] is None:
+            return
+        st["writer"].close()
+        st["writer"] = None
+        part = st["part"]
+        tr.q(f"ALTER TABLE iceberg.arxiv.pdf EXECUTE add_files(location => 's3://{path_of(part)}', format => 'PARQUET')")
+        meta = sorted(st["meta"], key=lambda r: (r["paper_id"], r["version"]))
         add_files(tr, fs, "paper_files", f"{prefix_files}/{part:05d}", [pa.Table.from_pylist(meta, FILES_SCHEMA)], 100000)
         log.info("part %d: %d PDFs added (total ok=%d, 404=%d, error=%d, %.1f GB)",
-                 part, len(rows), stats["ok"], stats["404"], stats["error"], stats["bytes"] / 1e9)
-        part += 1
-        rows = []
+                 part, len(meta), stats["ok"], stats["404"], stats["error"], stats["bytes"] / 1e9)
+        st["part"] += 1
+        st["meta"], st["rows"] = [], 0
+
+    def add_row(row):
+        st["buf"].append(row)
+        st["meta"].append({k: row[k] for k in ("paper_id", "version", "kind", "source", "path", "size", "sha256")} |
+                          {"path_encoding": "utf8", "stored_as": None, "stored_sha256": None, "stored_size": None})
+        st["rows"] += 1
+        if len(st["buf"]) >= 50:
+            write_group()
+        if st["rows"] >= a.rows_per_file:
+            close_file()
 
     with cf.ThreadPoolExecutor(a.workers) as ex:
         # 一度に投入する数を抑えてメモリを一定にする
         it = iter(todo)
         pending = set()
         while True:
-            while len(pending) < a.workers * 4:
+            while len(pending) < a.workers * 2:
                 try:
                     pid, ver = next(it)
                 except StopIteration:
@@ -168,15 +186,13 @@ def main():
                 if row:
                     stats["ok"] += 1
                     stats["bytes"] += row["size"]
-                    rows.append(row)
+                    add_row(row)
                 elif err == "404":
                     stats["404"] += 1
                 else:
                     stats["error"] += 1
                     log.warning("error: %s", err)
-            if len(rows) >= a.rows_per_file:
-                flush()
-    flush()
+    close_file()
     reconcile(tr)
     left = tr.one("SELECT count(*) FROM iceberg.arxiv.versions WHERE NOT has_pdf AND NOT is_metadata_only")
     log.info("done: ok=%d 404=%d error=%d %.1f GB. versions without pdf: %d",
