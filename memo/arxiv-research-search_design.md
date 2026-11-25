@@ -106,12 +106,17 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 ### 5.2 最新化 (必須)
 | 対象 | 取得元 | 頻度 | 処理 |
 |---|---|---|---|
-| メタデータ・版 | OAI-PMH arXivRaw (export.arxiv.org) | 日次 | 前回の datestamp 以降を取得し MERGE. 状態テーブルに記録. 新規・更新論文の埋め込みを作り論文索引を更新 |
-| PDF・ソース | `s3://arxiv/{pdf,src}/` (requester-pays, us-east-1) | 月次 | manifest を処理済みチャンクと比較 (md5sum, timestamp) → 新規・変更チャンクを取得・展開 → pdf / source / files に追記 → latex を拡張子で抽出 → 本文の組み立て → 正規化・節分割 (5.4) → チャンク → 引用抽出 → 版フラグ再計算 → 本文索引を更新 |
+| メタデータ・版 | OAI-PMH arXivRaw (`oaipmh.arxiv.org`) | 日次 | metadata の datestamp の最大値の前日以降を取得し MERGE (metadata は全列, versions は OAI 由来の列のみ. 新しい版はファイル由来の列を「なし」で追加). 新規・更新論文の埋め込みを作り論文索引を更新 |
+| PDF | GCS の公開ミラー `gs://arxiv-dataset` (匿名, 無料. HF と同じ出所. ファイル名に版あり) | 週次 | PDF のない版を名前で直接取得 → pdf / paper_files に add_files → versions の has_pdf / pdf_sha256 / is_latest_pdf を更新 |
+| ソース | `s3://arxiv/src/` (requester-pays, us-east-1) | 月次 | manifest で変わった tar のうち必要な論文 (ソースのない新しい論文, 新しい版が出た論文) を含むものだけ読む. 必要な論文が多い tar は丸ごと, 少ない tar は見出しを範囲指定で読んで目次を作り必要な分だけ取る → 既存の行を DELETE して source / latex / paper_files に add_files → 本文の組み立て → 正規化・節分割 (5.4) → チャンク → 引用抽出 → 本文索引を更新 |
 | 引用 | OpenAlex スナップショット (`s3://openalex`, 認証不要, 無料) | 四半期 | 必要な列だけ抽出し, DOI (arXiv の `10.48550/arXiv.*` を含む) で対応付け |
 
-- 初回の追い付き: yymm が 2608 以降のチャンクと, manifest の timestamp が 2026-09-05 より新しいチャンク. 重複は sha256 と (paper_id, version, path) で除去
-- 費用: requester-pays の転送料 約 $0.09/GB. 月 約 100GB で $10/月程度, 初回の追い付き 約 $30. AWS の認証情報は Vault + ESO
+- 実装: `deploy/science-systems/arxiv-sync/` (CronJob 3 つ. 詳細は README). 本文の組み立て以降は後続の加工 (5.4) で行う
+- S3 の tar の性質 (2026-11-25 に確認): tar の中の名前に版がない (`2610/2610.42099.gz`. tar を作った時点の最新版). arXiv は新しい月に加えて
+  過去の月の tar も作り直す (2026-09〜11 に 2409〜2411, 2509〜2511, 2606〜2607). 変わった tar を丸ごと取る当初の案は初回 約 1.9TB ($170),
+  毎月 $50 前後になるため, 必要な論文だけ取る方式にした. PDF は版つきの GCS のミラーから取る (S3 の PDF は使わない)
+- 初回の追い付き (2026-11-25〜): OAI 176,728 件 (論文 +119,388). PDF 約 20 万版 (GCS, 無料). ソース 約 18 万論文, 転送 約 400GB (約 $36)
+- 費用: ソースの転送料 約 $0.09/GB. 毎月は新規投稿の分 (約 130GB) と新しい版で $10〜15/月程度の見込み. AWS の認証情報は Vault + ESO
 - arXiv の規約: 全件クロールはせず S3 で取得する. 全文を使うサービスでは arXiv へのリンクを表示する
 - 新しい版が出た論文は, 本文索引の該当 paper_id のチャンクを削除して入れ直す (索引は常に最新版のみ)
 
@@ -260,7 +265,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
-| 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | 未着手 |
+| 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | OAI / PDF / ソースの取り込みを作成 (2026-11-26. `deploy/science-systems/arxiv-sync/`). 初回の追い付き中. OpenAlex と本文の組み立て以降は未着手 |
 | 10 | Open WebUI + LiteLLM (まず Claude / OpenAI で確認) | 未着手 |
 | 11 | 検索の評価と改善 (Reranker, 本文チャンクのベクトルなど) | 未着手 |
 | 別系統 | ローカル LLM の提供 (旧 Phase 3 の再開), エージェントのサンドボックス (search1) | 未着手 |
@@ -382,6 +387,12 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - 索引系の files は Iceberg では `paper_files` とする. Trino は Iceberg のメタデータテーブルの種類 (files / history / snapshots など) と
   同じ名前のテーブルを「名前空間の $files」と解釈し, 作成も参照もできないため. 列名と中身は元の files と同じ
 - 正本のテーブルは metadata / versions / paper_files / paper_text / latex / source / pdf / ps の 8 つ (名前空間 arxiv)
+
+### 2026-11-26 (最新化)
+- PDF は arXiv の S3 ではなく GCS の公開ミラー (`gs://arxiv-dataset`) から取る. 版つきの名前で直接取れ, 無料. HF のデータセットと同じ sha256
+- ソースは S3 から, 必要な論文だけを取る (tar の見出しを範囲指定で読んで目次を作る). 版は付けない (HF と同じく version は NULL)
+- OAI の取り込みが先 (どの論文のどの版が新しいかを確定する). その後に PDF とソースを取る
+- 書き込みは parquet + add_files (中身を Trino に通さない, 既存の parquet を書き換えない). 置き換えは Trino の DELETE (merge-on-read)
 
 ### 外部レビューで採らなかった案と理由
 | 案 | 理由 |
