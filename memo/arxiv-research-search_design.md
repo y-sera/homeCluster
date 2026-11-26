@@ -149,7 +149,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - `section_type`: 見出しから規則で分類する (intro / related / method / experiment / result / discussion / conclusion / appendix / other)
 - `chunk_id` = `{paper_id}:{section_id}:{chunk_index}`. `content_hash` で変更のないチャンクを判定し, 再埋め込みを省く
 - チャンクはオーバーラップなしのため, 同じ節のチャンクを順に連結すると節の本文になる
-- 新規論文の本文は, HF の paper_text と同等の組み立て処理を月次の取り込みで実装する
+- 新規論文の本文は, HF の paper_text と同等の組み立て処理を月次の取り込みで実装する → 実装済み (2026-11-26. `arxiv-sync/src/assemble.py`, CronJob `arxiv-text`. 2,230 論文で HF の行と 99.8% 一致. 初回 117,411 論文)
 - HF の paper_text の resolved は `\input` のファイルを `\end{document}` の後ろに連結している. 正規化では後ろの本文も含める (検証で判明)
 - 全件の処理の前にサンプルで検証する (5.7)
 
@@ -266,7 +266,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
-| 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | OAI / PDF / ソースの取り込みと初回の追い付きが完了 (2026-11-26. `deploy/science-systems/arxiv-sync/`. ソースは 2610 まで全論文. 転送 約 390GB, 約 $35). OpenAlex と本文の組み立て以降は未着手 |
+| 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | OAI / PDF / ソースの取り込みと初回の追い付きが完了 (2026-11-26. `deploy/science-systems/arxiv-sync/`. ソースは 2610 まで全論文. 転送 約 390GB, 約 $35). 本文の組み立て (paper_text) も完了 (11-26). OpenAlex と正規化以降は未着手 |
 | 10 | Open WebUI + LiteLLM (まず Claude / OpenAI で確認) | 未着手 |
 | 11 | 検索の評価と改善 (Reranker, 本文チャンクのベクトルなど) | 未着手 |
 | 別系統 | ローカル LLM の提供 (旧 Phase 3 の再開), エージェントのサンドボックス (search1) | 未着手 |
