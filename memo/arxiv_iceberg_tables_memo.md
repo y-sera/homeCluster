@@ -57,3 +57,14 @@ kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build     # ALL OK
   作成は "already exists" / IF NOT EXISTS は何もせず成功, 参照は "Metadata not found in metadata location" になる. そのため元の files は `paper_files` にした
 - mcp_reader は名前空間 `arxiv` のみ読める (`arxiv_staging` は不可). pdf / source / ps / latex の content 列は拒否 (trino/values/values.yaml)
 - Trino の動作確認の Job (`trino/manifests/smoke-test-job.yaml`) は iceberg.arxiv.latex を作って消すため, 今後は実行しない
+
+## 最新化 (2026-11-26 から)
+- `deploy/science-systems/arxiv-sync/` の CronJob 3 つで生データのテーブルを最新に保つ (詳細は同ディレクトリの README):
+  OAI-PMH → metadata / versions (日次), GCS の公開ミラー → pdf (週次), arXiv の S3 → source / latex (月次)
+- 追加の行は `arxiv/<テーブル>/data/sync/<run>/` に置いて add_files. 置き換えは DELETE (merge-on-read の削除ファイル).
+  HF からコピーした `data/hf/` の parquet は書き換えない
+- 状態のテーブル: 名前空間 `arxiv_sync` (src_chunks, src_payloads). OAI 用の一時テーブルは `arxiv_staging` に作って消す
+- 初回の追い付き (2026-11-25〜26) で, pdf に `data/sync/` の parquet 約 180 個 (630GB), source / latex / paper_files に
+  約 320 回分の add_files と DELETE が入った. 小さなファイルと削除ファイルが増えるため, metadata / versions / paper_files は
+  ときどき OPTIMIZE する. **pdf / source / latex は OPTIMIZE + expire_snapshots をしない** (上記)
+- paper_text は作り直していない (HF のデータセットにない論文と, ソースを置き換えた論文の本文は古いかない). 後続の加工で作る

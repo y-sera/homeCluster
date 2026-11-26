@@ -2,9 +2,10 @@
 
 S3 のソースは論文ごとに 1 つ (版の区別なし. tar を作った時点の最新版) で, tar (約 500MB) は過去の月の分も作り直される.
 転送料を抑えるため, 必要な論文のソースだけを取る:
-- 必要な論文: (a) ソースがまだない新しい論文 (--new-since 以降の投稿), または
+- 必要な論文: (a) ソースがまだない新しい論文 (--new-since 以降の投稿, または ID がその月以降), または
                (b) 前回取り込んだ時点 (HF のデータセットの論文は --baseline) より後に新しい版が出た論文
-- manifest で前回から変わった tar (ファイル名と md5) のうち, 必要な論文を含むもの (manifest の first_item / last_item で判定) だけを読む
+- manifest で前回から変わった tar (ファイル名と md5) のうち, 必要な論文を含むもの (manifest の first_item / last_item で判定) だけを読む.
+  ソースがまだない論文は処理済みの tar からも探す. tar の範囲に入るのに中身がない論文は src_payloads に n_files 0 で記録し, 次からは探さない
 - 必要な論文が tar の --whole-ratio 以上なら tar ごと (範囲指定で並列に --conns 接続) 取得し, それ以外は tar の見出し (512 バイト) を範囲指定で順に読んで
   目次を作り, 必要なファイルだけを範囲指定で取得する
 - 1 回の取得量の上限 --max-gb (転送料 約 $0.09/GB)
@@ -255,11 +256,18 @@ class Writer:
         self.part = 0
         self.papers = {}       # key → (pid, chunk, member, member_size, files)
         self.chunks = []
+        self.missing = {}      # key → (pid, chunk)
         self.bytes = 0
         self.stats = {"papers": 0, "files": 0, "bytes": 0}
 
-    def add(self, chunk, results):
+    def add(self, chunk, results, wanted=()):
+        found = {x[0] for x in results}
+        for k in set(wanted) - found:
+            # tar の範囲に入るのに中身がない論文 (ソースのない投稿など). 記録して, 新しい版か新しい tar が出るまで探さない
+            if k not in self.papers:
+                self.missing[k] = (pid_of(k), chunk)
         for k, member, msize, files in results:
+            self.missing.pop(k, None)
             old = self.papers.get(k)
             if old and old[1]["timestamp"] > chunk["timestamp"]:
                 continue
@@ -308,11 +316,16 @@ class Writer:
             self.stats["papers"] += len(papers)
             self.stats["files"] += len(src)
             self.stats["bytes"] += self.bytes
+        if self.missing:
+            insert_values(tr, "iceberg.arxiv_sync.src_payloads",
+                          ["paper_id", "tar", "member", "member_size", "tar_timestamp", "n_files", "synced_at"],
+                          [[pid, c["filename"], None, None, c["timestamp"], 0, NOW] for pid, c in self.missing.values()])
+            log.info("not in tar (recorded): %d papers", len(self.missing))
         mark_chunks(tr, self.chunks, "synced")
         log.info("part %d: %d papers, %d chunks (total papers=%d files=%d %.1f GB)", self.part, len(papers),
                  len(self.chunks), self.stats["papers"], self.stats["files"], self.stats["bytes"] / 1e9)
         self.part += 1
-        self.papers, self.chunks, self.bytes = {}, [], 0
+        self.papers, self.chunks, self.missing, self.bytes = {}, [], {}, 0
 
 
 # ---------------------------------------------------------------- 本体
@@ -363,7 +376,9 @@ def main():
         SELECT lv.paper_id,
                coalesce(pay.ts, CASE WHEN src.paper_id IS NOT NULL THEN '{a.baseline} 00:00:00' END) AS have_ts
         FROM lv LEFT JOIN src ON src.paper_id = lv.paper_id LEFT JOIN pay ON pay.paper_id = lv.paper_id
-        WHERE (src.paper_id IS NULL AND pay.paper_id IS NULL AND lv.first_d >= TIMESTAMP '{a.new_since} 00:00:00')
+        WHERE (src.paper_id IS NULL AND pay.paper_id IS NULL
+               AND (lv.first_d >= TIMESTAMP '{a.new_since} 00:00:00'
+                    OR (lv.paper_id NOT LIKE '%/%' AND substr(lv.paper_id, 1, 4) >= '{a.new_since[2:4]}{a.new_since[5:7]}')))
            OR lv.last_d > CAST(coalesce(pay.ts, '{a.baseline} 00:00:00') AS timestamp(6))"""):
         need[key_of(pid)] = have_ts
     log.info("papers needing source: %d (new: %d)", len(need), sum(v is None for v in need.values()))
@@ -373,10 +388,17 @@ def main():
     for k in need:
         by_yymm.setdefault(yymm_of(pid_of(k)), []).append(k)
     plan, untouched = [], []
-    for c in changed:
+    # ソースのない論文 (need が None) は処理済みの tar も含めて探す. それ以外は変わった tar だけ
+    changed_names = {c["filename"] for c in changed}
+    for c in manifest:
+        is_changed = c["filename"] in changed_names
         ks = [k for k in by_yymm.get(c["yymm"], [])
-              if c["first_item"] <= k <= c["last_item"] and (need[k] is None or c["timestamp"] > need[k])]
-        (plan if ks else untouched).append((c, set(ks)))
+              if c["first_item"] <= k <= c["last_item"]
+              and (need[k] is None or (is_changed and c["timestamp"] > need[k]))]
+        if ks:
+            plan.append((c, set(ks)))
+        elif is_changed:
+            untouched.append((c, set()))
     whole = [p for p in plan if len(p[1]) >= p[0]["num_items"] * a.whole_ratio]
     log.info("chunks to read: %d (whole: %d, %.1f GB; range: %d), papers: %d; chunks without needed papers: %d",
              len(plan), len(whole), sum(p[0]["size"] for p in whole) / 1e9, len(plan) - len(whole),
@@ -402,15 +424,15 @@ def main():
                     log.warning("reached --max-gb %.0f; stopping (the rest will be read next time)", a.max_gb)
                     stop = True
                     break
-                futs[ex.submit(fetch_chunk, s3, c, ks, a.whole_ratio)] = c
+                futs[ex.submit(fetch_chunk, s3, c, ks, a.whole_ratio)] = (c, ks)
             if not futs:
                 break
             fin, _ = cf.wait(futs, return_when=cf.FIRST_COMPLETED)
             for f in fin:
-                c = futs.pop(f)
+                c, ks = futs.pop(f)
                 results, mode = f.result()
                 log.info("%s (%s): %d papers, downloaded so far %.1f GB", c["filename"], mode, len(results), s3.bytes / 1e9)
-                w.add(c, results)
+                w.add(c, results, ks)
             if w.bytes > a.flush_gb * 1e9:
                 w.flush()
     w.flush()
