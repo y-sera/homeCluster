@@ -67,4 +67,4 @@ kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build     # ALL OK
 - 初回の追い付き (2026-11-25〜26) で, pdf に `data/sync/` の parquet 約 180 個 (630GB), source / latex / paper_files に
   約 320 回分の add_files と DELETE が入った. 小さなファイルと削除ファイルが増えるため, metadata / versions / paper_files は
   ときどき OPTIMIZE する. **pdf / source / latex は OPTIMIZE + expire_snapshots をしない** (上記)
-- paper_text は作り直していない (HF のデータセットにない論文と, ソースを置き換えた論文の本文は古いかない). 後続の加工で作る
+- paper_text は `arxiv-text` (月次, ソースの翌日) が latex から組み立て直す (HF と同じ方式. 2026-11-26 に 117,411 論文. 2,965,036 行). 状態は `arxiv_sync.text_builds`

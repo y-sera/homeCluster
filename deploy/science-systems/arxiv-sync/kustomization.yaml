@@ -8,6 +8,7 @@ resources:
 - manifests/oai-cronjob.yaml
 - manifests/pdf-cronjob.yaml
 - manifests/source-cronjob.yaml
+- manifests/text-cronjob.yaml
 configMapGenerator:
 - name: arxiv-sync-src
   files:
@@ -16,3 +17,5 @@ configMapGenerator:
   - src/oai.py
   - src/pdf.py
   - src/source.py
+  - src/assemble.py
+  - src/text.py

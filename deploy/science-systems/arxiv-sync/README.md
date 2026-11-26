@@ -8,6 +8,7 @@ HF のデータセット (secemp9/arxiv-complete, メタデータ 2026-08-30 / �
 | `arxiv-oai` | 毎日 06:00 JST | OAI-PMH arXivRaw (`https://oaipmh.arxiv.org/oai`) | metadata, versions (MERGE) | なし |
 | `arxiv-pdf` | 毎週日曜 09:00 JST | GCS の公開ミラー `gs://arxiv-dataset` (匿名) | pdf, paper_files (add_files), versions (has_pdf など) | なし |
 | `arxiv-source` | 毎月 15 日 09:00 JST | arXiv の S3 `s3://arxiv/src/` (requester-pays) | source, latex, paper_files (DELETE + add_files) | 約 $0.09/GB |
+| `arxiv-text` | 毎月 16 日 09:00 JST | latex (上のソースの取り込みの結果) | paper_text (DELETE + add_files) | なし |
 
 ```bash
 kubectl apply -k deploy/science-systems/arxiv-sync           # コード (src/) は ConfigMap になる
@@ -62,7 +63,7 @@ arXiv は新しい月の tar に加えて過去の月の tar も作り直す (20
 - **AWS (us-east-1) までの速度**: 1 接続あたり 0.1〜1MB/s と遅く, 時間帯で大きく変わる (GCS は 1 接続 5MB/s 以上).
   tar を 1 接続で流すと全体で 1〜6MB/s だったため, 範囲指定の並列取得にして約 9.5MB/s (2026-11-26)
 - manifest の `size` は実際の tar より少し小さい (tar の末尾の分). 大きさは HEAD で取る. `md5sum` は ETag と一致する
-- **paper_text (本文の組み立て) は作り直さない**. 新しい論文の本文と, ソースが置き換わった論文の本文の更新は後続の加工 (5.4) で行う
+- paper_text はここでは作らない (翌日の `arxiv-text` が作る)
 - 初回のみ: `source.py --init-baseline` で, manifest の tar のうち 2026-09-05 以前のものを処理済みとして記録する (2026-11-25 実施. 12,312 個)
 - メモリ: 4 並列で約 5.5GiB (上限 12Gi). 書き込みは 1GB ごと (`--flush-gb`)
 
@@ -72,9 +73,29 @@ arXiv は新しい月の tar に加えて過去の月の tar も作り直す (20
 | OAI | 176,728 件 (論文 3,148,796 → 3,268,184) | 23 分 |
 | PDF | 180,243 版, 629.9GB (404: 25,107 版. ミラーにまだない) | 4 時間 38 分 |
 | ソース | 約 11.7 万論文 (2606〜2610 のほぼ全部と新しい版の論文), 約 190 万ファイル. 転送 約 390GB (約 $35) | 約 13 時間 |
+| paper_text | 117,411 論文を組み立て (single 73,144 / resolved 38,370 / fallback 890. TeX なし 5,007 は行なし). 本文 11.6GB.
+  paper_text は 2,856,227 → 2,965,036 行. 2606〜2610 の TeX のある論文は全部 | 35 分 |
 - 2611 の論文 (約 3.3 万) は arXiv がまだ tar にしていないため次回 (12-15) に取る
 - 途中の失敗: PDF は 1,000 行分を溜めて OOM (6Gi) → 50 行ずつ書く. ソースは 2GB 分の中身を一度に arrow にして OOM (8Gi) →
   2,000 行ずつ arrow にする. いずれも再実行で続きから再開できた
+
+## 本文の組み立て (text.py, assemble.py)
+HF のデータセットの paper_text と同じ方式で, latex の TeX から論文ごとに 1 つの文字列を作る. HF は組み立てのコードを公開していないため,
+README の説明と実際の行から方式を割り出し, 2,230 論文 (single 877, resolved 1,259, fallback 94) で HF の行と比べた:
+**text_sha256, main_file, resolution, n_tex_files, n_files_used, n_unused_files, text_encoding のすべてが 99.8% (2,226 件) で一致**
+- TeX ファイルは ext が tex / ltx のもの. 1 つなら `single`
+- 複数なら主ファイルを選ぶ: `\documentclass` か `\documentstyle` を含むファイル (コメントの中も数える. HF と同じ) のうち,
+  階層が最も浅く, その中で最も大きいもの. そこから `\input` / `\include` / `\subfile` を深さ優先でたどる (コメントは除く.
+  拡張子の省略, 親のディレクトリからの相対, マクロを含むパスは名前が一意に一致すれば採る)
+- 展開したファイルの合計が TeX の総バイトの半分以上なら `resolved`: **ファイルをその位置に展開せず, たどった順に丸ごと連結する**
+  (そのため取り込んだファイルは主ファイルの `\end{document}` の後ろに来る). 半分未満または主ファイルがなければ
+  `fallback`: 全 TeX ファイルを path 順に連結
+- 最後に .bbl をすべて path 順に付ける (`\input` されていても展開には含めず, 最後に付ける)
+- 連結は改行 1 つ. 全体を UTF-8 で解釈し, 失敗したら latin-1 (`text_encoding`)
+- title / abstract / primary_category / license は metadata の現在の値
+- 対象: ソースを取り込んだ論文のうち, 前回の組み立て (`iceberg.arxiv_sync.text_builds`) より新しいものと, TeX があるのに
+  paper_text のない論文. 新しいソースに TeX がない論文 (PDF だけの版になったなど) は行を消す (HF も PDF だけの論文の行はない)
+- 一致しない 4 件: 主ファイルの候補が 2 つあり HF だけ fallback にした 2 件, 細かな展開の違い 2 件
 
 ## 注意
 - 3 つのジョブは同じテーブル (versions, paper_files) に書くため同時に動かさない (Iceberg のコミットが衝突する). 時刻をずらしてある
