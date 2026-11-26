@@ -5,7 +5,7 @@ S3 のソースは論文ごとに 1 つ (版の区別なし. tar を作った時
 - 必要な論文: (a) ソースがまだない新しい論文 (--new-since 以降の投稿), または
                (b) 前回取り込んだ時点 (HF のデータセットの論文は --baseline) より後に新しい版が出た論文
 - manifest で前回から変わった tar (ファイル名と md5) のうち, 必要な論文を含むもの (manifest の first_item / last_item で判定) だけを読む
-- 必要な論文が tar の --whole-ratio 以上なら tar ごと取得し, それ以外は tar の見出し (512 バイト) を範囲指定で順に読んで
+- 必要な論文が tar の --whole-ratio 以上なら tar ごと (範囲指定で並列に --conns 接続) 取得し, それ以外は tar の見出し (512 バイト) を範囲指定で順に読んで
   目次を作り, 必要なファイルだけを範囲指定で取得する
 - 1 回の取得量の上限 --max-gb (転送料 約 $0.09/GB)
 
@@ -77,9 +77,21 @@ class S3:
     def __init__(self):
         self.c = boto3.client("s3", region_name="us-east-1",
                               config=botocore.config.Config(retries={"max_attempts": 10, "mode": "adaptive"},
-                                                            max_pool_connections=32))
+                                                            max_pool_connections=96))
         self.bytes = 0
         self.lock = threading.Lock()
+        self.px = None   # 範囲指定の並列取得用 (set_parallel)
+
+    def set_parallel(self, conns, part_mb):
+        self.px = cf.ThreadPoolExecutor(conns)
+        self.part = part_mb << 20
+
+    def get_whole(self, key):
+        """tar 全体を範囲指定で並列に取得する. AWS までの経路は 1 接続あたりが遅い (0.1〜1MB/s) ため, 接続数で稼ぐ.
+        大きさは HEAD で取る (manifest の size は実際の大きさより少し小さい. md5sum は ETag と一致する)."""
+        size = self.c.head_object(Bucket=BUCKET, Key=key, RequestPayer="requester")["ContentLength"]
+        parts = [(o, min(self.part, size - o)) for o in range(0, size, self.part)]
+        return b"".join(self.px.map(lambda p: self.get(key, *p), parts))
 
     def get(self, key, start=None, length=None):
         kw = {"Bucket": BUCKET, "Key": key, "RequestPayer": "requester"}
@@ -165,17 +177,18 @@ def fetch_chunk(s3, chunk, wanted, whole_ratio):
     key = chunk["filename"]
     out = []
     if len(wanted) >= chunk["num_items"] * whole_ratio:
-        body = s3.stream(key)
-        with tarfile.open(fileobj=body, mode="r|", encoding="utf-8", errors="surrogateescape") as t:
+        raw = s3.get_whole(key)
+        if hashlib.md5(raw).hexdigest() != chunk["md5sum"]:
+            raise RuntimeError(f"{key}: md5 mismatch")
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:", encoding="utf-8", errors="surrogateescape") as t:
             for m in t:
                 if not m.isreg():
                     continue
                 k = m.name.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                data = t.extractfile(m).read()
-                with s3.lock:
-                    s3.bytes += len(data) + 512
                 if k in wanted:
+                    data = t.extractfile(m).read()
                     out.append((k, m.name, m.size, expand(k, m.name, data)))
+        del raw
         return out, "whole"
     left = set(wanted)
     for name, start, size in tar_index(s3, key):
@@ -313,12 +326,15 @@ def main():
                     help="初回のみ: manifest の tar のうち baseline 以前のものを処理済みとして記録する")
     ap.add_argument("--whole-ratio", type=float, default=0.3)
     ap.add_argument("--max-gb", type=float, default=200, help="1 回の取得量の上限 (GB)")
-    ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--conns", type=int, default=64, help="tar を丸ごと取るときの同時接続数 (全体)")
+    ap.add_argument("--part-mb", type=int, default=16)
     ap.add_argument("--flush-gb", type=float, default=1.0)
     ap.add_argument("--dry-run", action="store_true", help="対象の tar と論文の数を表示するだけ")
     a = ap.parse_args()
 
     tr, fs, s3, rid = Trino(), rustfs(), S3(), run_id()
+    s3.set_parallel(a.conns, a.part_mb)
     ensure_state(tr)
     body = s3.get("src/arXiv_src_manifest.xml")
     put_bytes(fs, f"{RAW}/s3/manifests/{rid}/arXiv_src_manifest.xml.gz", gzip.compress(body))
