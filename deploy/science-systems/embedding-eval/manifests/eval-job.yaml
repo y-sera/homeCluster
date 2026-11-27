@@ -1,0 +1,103 @@
+# 埋め込みモデルの比較 (DGX Spark の GPU を 2 つとも使う. 実行中は GPU Workspace / Trainer / ローカル LLM を動かせない).
+#   kubectl apply -k deploy/science-systems/embedding-eval
+#   kubectl -n science-systems logs -f -l app=embedding-eval --prefix
+#   kubectl delete -k deploy/science-systems/embedding-eval    # 終わったら (結果は RustFS s3://arxiv-raw/eval/v1/results/)
+# index 0: Qwen3-Embedding-0.6B (title + abstract / カテゴリ付き) と BGE-M3 (約 1 時間 45 分), index 1: Qwen3-Embedding-4B (参考. 約 2 時間 40 分)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: embedding-eval
+  namespace: science-systems
+spec:
+  completionMode: Indexed
+  completions: 2
+  parallelism: 2
+  backoffLimitPerIndex: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app: embedding-eval
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      nodeSelector:
+        node-role.kubernetes.io/gpu: ""
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: embedding-eval
+            topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: eval
+        # Kubeflow の Workspace と同じイメージ (arm64, CUDA 13, PyTorch). 依存は起動時に入れる (torch は入れ替えない)
+        image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-pytorch-cuda-full:v1.11.1
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: HF_HOME
+          value: /tmp/hf
+        # --target では pip がイメージの torch を認識せず入れ直そうとするため, ユーザーの site-packages に入れる
+        - name: PYTHONUSERBASE
+          value: /tmp/.local
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: RUSTFS_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_ACCESS_KEY
+        - name: RUSTFS_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: science-rustfs-credentials
+              key: RUSTFS_SECRET_KEY
+        # 文書集合は正解 + 15 万件 (GB10 で Qwen3-0.6B 約 58 docs/s, BGE-M3 約 180, Qwen3-4B 約 16 のため)
+        - name: EVAL_ARGS
+          value: "--limit-docs 150000"
+        command:
+        - bash
+        - -ec
+        - |
+          pip install --quiet --no-cache-dir --disable-pip-version-check --no-warn-script-location --user -r /app/requirements.txt
+          python -c "import torch; print('torch', torch.__version__, torch.cuda.get_device_name(0))"
+          case "$JOB_COMPLETION_INDEX" in
+            0) python /app/embed_eval.py --models qwen3-0.6b --variants plain,cat $EVAL_ARGS
+               exec python /app/embed_eval.py --models bge-m3 --variants plain $EVAL_ARGS ;;
+            1) exec python /app/embed_eval.py --models qwen3-4b --variants plain $EVAL_ARGS ;;
+          esac
+        resources:
+          requests:
+            cpu: "8"
+            memory: 48Gi
+            nvidia.com/gpu: "1"
+          limits:
+            memory: 96Gi
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: app
+          mountPath: /app
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: app
+        configMap:
+          name: embedding-eval-src
+      - name: tmp
+        emptyDir: {}

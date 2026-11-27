@@ -1,0 +1,11 @@
+# 埋め込みモデルの比較の Job (一回限り). 評価データの作り方は README.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: science-systems
+resources:
+- manifests/eval-job.yaml
+configMapGenerator:
+- name: embedding-eval-src
+  files:
+  - src/requirements.txt
+  - src/embed_eval.py
