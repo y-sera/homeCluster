@@ -152,6 +152,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 新規論文の本文は, HF の paper_text と同等の組み立て処理を月次の取り込みで実装する → 実装済み (2026-11-26. `arxiv-sync/src/assemble.py`, CronJob `arxiv-text`. 2,230 論文で HF の行と 99.8% 一致. 初回 117,411 論文)
 - HF の paper_text の resolved は `\input` のファイルを `\end{document}` の後ろに連結している. 正規化では後ろの本文も含める (検証で判明)
 - 全件の処理の前にサンプルで検証する (5.7)
+- 全件の加工は実装済み (2026-11-27. `arxiv-sync/src/chunks.py`. 記録は `arxiv_sync.chunk_builds`). `version` はソースの版の記録がないため処理時点の最新の版 (推定)
 
 ### 5.5 埋め込み
 | 項目 | 内容 |
@@ -264,7 +265,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
 | 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 完了 (2026-11-25. 8 テーブル. `memo/arxiv_iceberg_tables_memo.md`) |
 | 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
-| 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 未着手 |
+| 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 全件の加工は完了 (2026-11-27. 2,965,036 論文 → 節 5,127 万, チャンク 9,642 万, 506 億トークン. DGX Spark の CPU で 140 分. `arxiv-sync/src/chunks.py`, 月次は CronJob `arxiv-chunks`). 埋め込み・引用抽出・索引作成は未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
 | 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | OAI / PDF / ソースの取り込みと初回の追い付きが完了 (2026-11-26. `deploy/science-systems/arxiv-sync/`. ソースは 2610 まで全論文. 転送 約 390GB, 約 $35). 本文の組み立て (paper_text) も完了 (11-26). OpenAlex と正規化以降は未着手 |
 | 10 | Open WebUI + LiteLLM (まず Claude / OpenAI で確認) | 未着手 |
@@ -394,6 +395,11 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - ソースは S3 から, 必要な論文だけを取る (tar の見出しを範囲指定で読んで目次を作る). 版は付けない (HF と同じく version は NULL)
 - OAI の取り込みが先 (どの論文のどの版が新しいかを確定する). その後に PDF とソースを取る
 - 書き込みは parquet + add_files (中身を Trino に通さない, 既存の parquet を書き換えない). 置き換えは Trino の DELETE (merge-on-read)
+
+### 2026-11-27 (全件の加工)
+- 節とチャンクを全件で作成した (paper_sections 51,271,378 行, paper_chunks 96,418,221 行, 506 億トークン. 検証からの推定 9,100 万チャンク・480 億トークンとほぼ同じ)
+- 一回限りの全件の処理は, 空いている DGX Spark 2 台の CPU で行う (GPU は使わない). 月次の新規分は worker で 4 並列
+- 正規化の例外 2 種 (177 件) を直した. 例外だった入力の扱いだけのため normalizer の版は変えない
 
 ### 外部レビューで採らなかった案と理由
 | 案 | 理由 |
