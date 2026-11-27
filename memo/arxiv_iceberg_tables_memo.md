@@ -14,6 +14,8 @@ HF のデータセット (secemp9/arxiv-complete) を Iceberg テーブルにす
 | metadata | CTAS (書き直し) | `arxiv/metadata-<uuid>` | year(first_version_date) / paper_id | 3,148,796 |
 | versions | CTAS | `arxiv/versions-<uuid>` | なし / paper_id, version | 5,030,612 |
 | paper_files (元の files) | CTAS | `arxiv/paper_files-<uuid>` | なし / paper_id, version, path | 54,597,326 |
+| paper_sections (派生) | arxiv-sync の chunks.py (add_files) | `arxiv/paper_sections/iceberg` (データは `data/<run>/`) | なし / paper_id, ordinal | 51,271,378 |
+| paper_chunks (派生) | 同上 | `arxiv/paper_chunks/iceberg` | なし / paper_id, section_id, chunk_index | 96,418,221 |
 
 場所は `s3://arxiv-warehouse/` からの相対パス. 列は元の parquet と同じ (設計メモ 3 章).
 中身系の並び (sorted_by) は今後の書き込み用の設定. 既存の parquet はもともと paper_id の辞書順 (新形式 ID が先, 旧形式が後) のため,
@@ -68,3 +70,5 @@ kubectl -n science-systems logs -f job/arxiv-iceberg-index -c build     # ALL OK
   約 320 回分の add_files と DELETE が入った. 小さなファイルと削除ファイルが増えるため, metadata / versions / paper_files は
   ときどき OPTIMIZE する. **pdf / source / latex は OPTIMIZE + expire_snapshots をしない** (上記)
 - paper_text は `arxiv-text` (月次, ソースの翌日) が latex から組み立て直す (HF と同じ方式. 2026-11-26 に 117,411 論文. 2,965,036 行). 状態は `arxiv_sync.text_builds`
+- 節とチャンク (paper_sections / paper_chunks) は `arxiv-chunks` (月次, 本文の組み立ての翌日) が paper_text から作る
+  (2026-11-27 に全 2,965,036 論文. normalizer v0.7 / chunker v0.2). 状態は `arxiv_sync.chunk_builds`. 自前の parquet のみのため OPTIMIZE してよい

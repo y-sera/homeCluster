@@ -1,0 +1,85 @@
+# paper_text を正規化し, 節 (paper_sections) とチャンク (paper_chunks) に分ける CronJob (毎月 17 日 09:00 JST. 本文の組み立て (16 日) の翌日).
+#   kubectl -n science-systems create job arxiv-chunks-manual --from=cronjob/arxiv-chunks
+# - 対象は paper_text の行のうち未加工のもの, 本文か処理のバージョンが変わったもの (arxiv_sync.chunk_builds で管理)
+# - 処理は src/texnorm.py (正規化と節), src/chunker.py (チャンク). 月次の新規 (約 12 万件) は 4 並列で 1 時間程度
+# - 全件のやり直し (バージョンを変えた時など) は DGX Spark で並列にする (README の「全件の加工」)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: arxiv-chunks
+  namespace: science-systems
+spec:
+  schedule: "0 9 17 * *"
+  timeZone: Asia/Tokyo
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          # Service のリンク用の環境変数 (TRINO_PORT=tcp://... など) を入れない
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: chunks
+            image: python:3.14.10-slim-trixie
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            env:
+            - name: HOME
+              value: /tmp
+            - name: PYTHONPATH
+              value: /tmp/py:/app
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TRINO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trino-clients
+                  key: admin-password
+            # RustFS の root (他の最新化ジョブと同じ)
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_ACCESS_KEY
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: science-rustfs-credentials
+                  key: RUSTFS_SECRET_KEY
+            command:
+            - sh
+            - -ec
+            - |
+              pip install --quiet --no-cache-dir --disable-pip-version-check --target /tmp/py -r /app/requirements.txt
+              exec python /app/chunks.py --workers 4
+            resources:
+              requests:
+                cpu: "2"
+                memory: 4Gi
+              limits:
+                memory: 16Gi
+            volumeMounts:
+            - name: app
+              mountPath: /app
+            - name: tmp
+              mountPath: /tmp
+          volumes:
+          - name: app
+            configMap:
+              name: arxiv-sync-src
+          - name: tmp
+            emptyDir: {}

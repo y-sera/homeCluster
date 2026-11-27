@@ -23,6 +23,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(__file__))
+# texnorm / chunker は本番の arxiv-sync/src にある (Pod では /work/src に一緒にコピーする)
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../arxiv-sync/src"))
 import chunker  # noqa: E402
 import texnorm  # noqa: E402
 

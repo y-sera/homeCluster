@@ -1,7 +1,7 @@
 # arXiv の最新化ジョブ (arxiv-sync)
 
 HF のデータセット (secemp9/arxiv-complete, メタデータ 2026-08-30 / ファイル 2026-09-05 時点) から作った
-`iceberg.arxiv` の生データのテーブルを最新に保つ CronJob. 設計は `memo/arxiv-research-search_design.md` の 5.2.
+`iceberg.arxiv` の生データのテーブルと, そこから作る本文・節・チャンクを最新に保つ CronJob. 設計は `memo/arxiv-research-search_design.md` の 5.2.
 
 | CronJob | 頻度 | 取得元 | 更新するテーブル | 費用 |
 |---|---|---|---|---|
@@ -9,6 +9,7 @@ HF のデータセット (secemp9/arxiv-complete, メタデータ 2026-08-30 / �
 | `arxiv-pdf` | 毎週日曜 09:00 JST | GCS の公開ミラー `gs://arxiv-dataset` (匿名) | pdf, paper_files (add_files), versions (has_pdf など) | なし |
 | `arxiv-source` | 毎月 15 日 09:00 JST | arXiv の S3 `s3://arxiv/src/` (requester-pays) | source, latex, paper_files (DELETE + add_files) | 約 $0.09/GB |
 | `arxiv-text` | 毎月 16 日 09:00 JST | latex (上のソースの取り込みの結果) | paper_text (DELETE + add_files) | なし |
+| `arxiv-chunks` | 毎月 17 日 09:00 JST | paper_text | paper_sections, paper_chunks (DELETE + add_files) | なし |
 
 ```bash
 kubectl apply -k deploy/science-systems/arxiv-sync           # コード (src/) は ConfigMap になる
@@ -97,8 +98,49 @@ README の説明と実際の行から方式を割り出し, 2,230 論文 (single
   paper_text のない論文. 新しいソースに TeX がない論文 (PDF だけの版になったなど) は行を消す (HF も PDF だけの論文の行はない)
 - 一致しない 4 件: 主ファイルの候補が 2 つあり HF だけ fallback にした 2 件, 細かな展開の違い 2 件
 
+## 節とチャンク (chunks.py, texnorm.py, chunker.py)
+paper_text を正規化して節 (`iceberg.arxiv.paper_sections`) とチャンク (`iceberg.arxiv.paper_chunks`) に分ける (設計メモ 5.4).
+正規化とチャンク分割はチャンク作成の検証 (`../chunking-poc/`) で確かめた処理そのもの (normalizer v0.7, chunker v0.2).
+- 対象: paper_text の行のうち, 記録 (`iceberg.arxiv_sync.chunk_builds`) がない, 本文 (`text_sha256`) か処理のバージョンが
+  記録と違う, または前回が失敗した論文. paper_text からなくなった論文は節・チャンク・記録を消す
+- 読み込み: paper_text の parquet を RustFS から直接読む. 今の行がどのファイルにあるかは Trino の `"$path"` で調べる
+  (DELETE で消えた古い行は読まない)
+- 書き込み: 約 2 万論文ごとに parquet を `add_files` (`arxiv/paper_{sections,chunks}/data/<run>/`, `arxiv_sync/chunk_builds/data/<run>/`).
+  置き換える論文は先に DELETE する. 記録は最後に足すため, 途中で止まった場合は記録のない行を次回の開始時に消して作り直す
+- `version`: 処理の時点の最新の版. ソースの版は記録がない (paper_files の source は version が NULL) が, arXiv の S3 のソースは
+  取り込んだ時点の最新の版のため, これを推定の版とする
+- トークン数: `Qwen/Qwen3-Embedding-0.6B` のトークナイザ (revision と sha256 を固定して HF から取る). 節の `n_tokens` は
+  チャンクの合計 (要旨と参考文献はチャンクにしないため直接数える)
+- `chunk_builds`: 論文ごとの状態 (ok / empty / error), 節数, チャンク数, トークン数, 引用のキー (`cite_keys`, JSON. 引用抽出用), 処理時間
+- 並列: `--shards n` でファイルを行数で n 個に分け, `--shard k` (Indexed Job では `JOB_COMPLETION_INDEX`) を処理する.
+  1 つのファイルの論文は 1 つの shard にだけ入るため, shard 同士で同じ論文を書かない. 月次 (約 12 万件) は CronJob `arxiv-chunks` (4 並列)
+
+全件の加工 (初回や, 処理のバージョンを変えた時) は DGX Spark 2 台の CPU で並列にする (GPU は使わない. 1 台 18 プロセス):
+```bash
+# CronJob の jobTemplate を Indexed Job (completions 2, parallelism 2) にし, nodeSelector node-role.kubernetes.io/gpu: "",
+# toleration nvidia.com/gpu, 2 台に分ける podAntiAffinity, requests cpu 18 / memory 32Gi, 引数 --shards 2 --workers 18 を足す
+```
+
+全件の加工の結果 (2026-11-27. DGX Spark 2 台, 1 台 18 プロセス, 140 分. 約 215 論文/秒/台)
+| 項目 | 値 | 検証 (10,000 件) からの推定 |
+|---|---|---|
+| 論文 | 2,965,036 (paper_text の全行). ok 2,950,975, empty (チャンクなし) 14,061 (0.47%), error 0 | |
+| 節 | 51,271,378 (本文 183G 文字) | |
+| チャンク | 96,418,221 (論文あたり平均 32.7, 中央値 25, P95 79). text 88.4M, table 7.1M, code 0.9M | 約 9,100 万 |
+| トークン | 506 億 (チャンクあたり P5 74, 中央値 595, P95 820, P99 939, 最大 1,599. 500〜800 は 54%, 100 未満 7.0%, 1,000 超 8,095 件) | 約 480 億 |
+| チャンクの本文 | 163G 文字 | 約 155GB |
+| 保存の大きさ (ZSTD) | paper_sections 60.1GB, paper_chunks 55.4GB, chunk_builds 1.1GB (各 151 ファイル) | |
+
+- 確認: 記録は paper_text の全行と (paper_id, text_sha256) で一致. 論文ごとの節数・チャンク数は記録と一致 (重複なし). version の NULL は 0
+- 全件の処理で 177 件 (0.006%) が失敗した. 正規化の 2 つの不具合を直して, 失敗した論文だけ作り直した (normalizer の版は v0.7 のまま.
+  直したのは例外になっていた入力の扱いだけのため):
+  - 引数の位置の `\` の直後が改行か本文の末尾 (171 件. `read_args` が例外)
+  - 本文に制御文字 `\x00`〜`\x02` が混じる (6 件. 数式を退避する目印と衝突). 入力から除く. この文字を含み, 例外にならなかった論文は
+    作り直していない (結果の違いは目印の位置の数式だけ)
+- 月次の少数の対象では, 行グループの paper_id の統計で読み飛ばす (以前はファイル全体を読み, 177 件に 20 分以上かかった)
+
 ## 注意
-- 3 つのジョブは同じテーブル (versions, paper_files) に書くため同時に動かさない (Iceberg のコミットが衝突する). 時刻をずらしてある
+- ジョブは同じテーブル (versions, paper_files など) に書くため同時に動かさない (Iceberg のコミットが衝突する). 時刻をずらしてある
 - add_files で追加した小さなファイルと MERGE / DELETE の削除ファイルが増えるため, metadata / versions / paper_files は
   ときどき `ALTER TABLE ... EXECUTE optimize` する (CTAS で作ったテーブル). **pdf / source / latex には OPTIMIZE + expire_snapshots をしない**
   (HF からコピーした parquet が消える. `memo/arxiv_iceberg_tables_memo.md`)

@@ -71,6 +71,9 @@ def skip_ws(s: str, i: int) -> int:
     return m.end() if m else i
 
 
+_ARG_CMD = re.compile(r"\\([A-Za-z@]+|.)", re.S)
+
+
 def read_args(s: str, i: int, n_req: int, opt: bool = True) -> tuple[list[str], list[str], int]:
     """コマンド名の直後から, 省略可能な [..] と n_req 個の {..} を読む."""
     opts: list[str] = []
@@ -92,9 +95,10 @@ def read_args(s: str, i: int, n_req: int, opt: bool = True) -> tuple[list[str], 
             a, j = read_group(s, k)
             args.append(a)
         elif k < len(s) and s[k] == "\\":
-            m = re.compile(r"\\([A-Za-z@]+|.)").match(s, k)
-            args.append(m.group(0))
-            j = m.end()
+            # 行末や本文の末尾の \ も 1 文字のコマンドとして読む (以前は例外になった)
+            m = _ARG_CMD.match(s, k)
+            j = m.end() if m else k + 1
+            args.append(m.group(0) if m else s[k])
         elif k < len(s):
             args.append(s[k])
             j = k + 1
@@ -838,10 +842,14 @@ def normalize_body(raw: str, ctx: Ctx, counters: dict) -> list[Block]:
     return blocks
 
 
+_CTRL = re.compile(r"[\x00-\x02]")
+
+
 def parse(text: str) -> Result:
     ctx = Ctx()
     counters = {"tables": 0, "figures": 0, "dropped_prog_chars": 0}
-    s = strip_comments(text)
+    # 内部の目印 (\x00〜\x02) と同じ制御文字を除く (latin-1 で読んだバイナリの混入. 以前は例外になった)
+    s = strip_comments(_CTRL.sub("", text))
     pre, body, has_doc = split_document(s)
     macros, pre = collect_macros(pre)
     m2, body = collect_macros(body)

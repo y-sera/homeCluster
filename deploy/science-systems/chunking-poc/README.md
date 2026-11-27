@@ -6,8 +6,8 @@ HF の paper_text (組み立て済みの TeX) を正規化し, 節 (`paper_secti
 ## ファイル
 ```
 dev-pod.yaml        作業用の Pod chunking-poc と PVC chunking-poc-work (Longhorn 20Gi). 元データ arxiv-datasets を /src に読み取り専用で
-src/texnorm.py      TeX の正規化と節の抽出 (normalizer_version)
-src/chunker.py      チャンク分割 (chunker_version). トークン数は Qwen/Qwen3-Embedding-0.6B のトークナイザ
+../arxiv-sync/src/texnorm.py  TeX の正規化と節の抽出 (normalizer_version). 全件の加工 (arxiv-sync の chunks.py) と共用
+../arxiv-sync/src/chunker.py  チャンク分割 (chunker_version). トークン数は Qwen/Qwen3-Embedding-0.6B のトークナイザ
 src/process.py      parquet → papers / sections / chunks の parquet (4 並列)
 src/make_sample.py  層別のサンプル (paper_text のランダムな 300 行グループから, 13 の層ごとに約 770 件)
 src/report.py       統計 (5.7 の「取る値」) と全件への外挿
@@ -18,7 +18,7 @@ results/            統計の結果 (JSON)
 ```bash
 kubectl apply -f deploy/science-systems/chunking-poc/dev-pod.yaml
 kubectl -n science-systems exec chunking-poc -- bash -c 'python -m venv /work/venv && /work/venv/bin/pip install pyarrow==22.0.0 tokenizers==0.22.1 huggingface_hub'
-for f in deploy/science-systems/chunking-poc/src/*.py; do kubectl -n science-systems cp $f chunking-poc:/work/src/$(basename $f); done
+for f in deploy/science-systems/chunking-poc/src/*.py deploy/science-systems/arxiv-sync/src/{texnorm,chunker}.py; do kubectl -n science-systems cp $f chunking-poc:/work/src/$(basename $f); done
 kubectl -n science-systems exec -it chunking-poc -- bash
 cd /work
 venv/bin/python src/process.py --input /src/sample/train-00000-of-00001.parquet --out out/sample    # HF の sample (991 件)
