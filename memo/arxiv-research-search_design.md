@@ -157,11 +157,11 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 ### 5.5 埋め込み
 | 項目 | 内容 |
 |---|---|
-| モデル | Qwen3-Embedding-0.6B (初期). BGE-M3 (dense) を比較用. 評価 (5.7) で確定する |
+| モデル | Qwen3-Embedding-0.6B (revision `97b0c614`). 評価 (5.7) で BGE-M3 より良く, 2026-11-28 に確定. Qwen3-Embedding-4B はさらに良い (引用の文脈の R@10 が +11 点) が, search1 の CPU での質問のベクトル化の遅延を測ってから再検討する |
 | 対象 (MVP) | 論文 (314 万件). 本文チャンクのベクトルは MVP 後 |
-| 文書側の入力 | `Title: ...\n\nAbstract: ...` (インストラクションなし). カテゴリを含める版も評価で比べる |
+| 文書側の入力 | `Title: ...\n\nAbstract: ...` (インストラクションなし). カテゴリを含めても良くならなかった (評価) |
 | 質問側の入力 | 固定のインストラクション付き (例: `Instruct: Given a research question, retrieve relevant arXiv papers\nQuery: {q}`) |
-| 次元・正規化 | 1024 次元, L2 正規化 (内積で検索). 次元の削減 (MRL) は評価で判断 |
+| 次元・正規化 | 1024 次元, L2 正規化 (内積で検索). 次元の削減 (MRL) はしない |
 | 記録する情報 | model, model_revision (固定), input_template_version, dim, normalize. `paper_embeddings` と索引のメタデータに記録 |
 | 一括処理 | DGX Spark の GPU, KFP のパイプライン. 結果は `paper_embeddings` に書き, そこから索引に入れる |
 | 質問のベクトル化 | search1 の CPU (KServe). 目標は p95 300ms 以下. 1 件と同時 5〜10 件の遅延, CPU, メモリ, 起動時間を測る |
@@ -178,6 +178,7 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
 - 実際の索引名に版を付け (`papers_v1` など), エイリアス (`papers`) で参照する. 作り直しは新しい索引を作ってから切り替える
 - `paper_chunks` の text は正規化した本文 (数式を含む) を保存し, 解析器の char_filter で数式を除いてから BM25 の索引を作る
 - ハイブリッド検索は search pipeline (RRF) で統合する. 候補は BM25・kNN それぞれ上位 50〜100 件
+- 日本語など英語以外の質問は kNN だけにする (BM25 が雑音になり MRR が 0.83 → 0.41 に落ちる. 評価 5.7)
 - 容量の見積もり (推定, 5.7 の検証で実測する): `papers` 約 25GB, `paper_chunks` 80〜150GB (zstd, オーバーラップなし)
 - `index.codec` の比較 (default / zstd / zstd_no_dict) を 5.7 の検証で行う. zstd は保存フィールド (_source) だけを圧縮し, 索引作成とマージで CPU を使う
 - 将来: 本文チャンクのベクトル (数千万件) は on_disk モード (二値量子化 + 再スコアリング) を候補とする. その時は SATA SSD を追加する
@@ -195,6 +196,11 @@ LLM のエージェントが MCP 経由で論文を検索・抽出・表示・�
   - 手作りの質問 50〜100 件
 - 指標: Recall@10, Recall@50, MRR, nDCG@10
 - 比べるもの: 埋め込みモデル (Qwen3-Embedding-0.6B / BGE-M3), 文書側の入力 (カテゴリの有無), BM25 のみ / kNN のみ / hybrid (RRF)
+- 結果 (2026-11-28. `deploy/science-systems/embedding-eval/README.md`): 評価データは引用の文脈 500 件, 要旨からの質問 (Claude が作成) 英語・日本語 各 104 件. 文書集合は正解 + ランダム 15 万件
+  - 引用の文脈の R@10: BM25 0.446, kNN Qwen3-0.6B 0.524 / BGE-M3 0.486 / Qwen3-4B 0.636, hybrid Qwen3-0.6B 0.562
+  - 日本語の R@10 (kNN): Qwen3-0.6B 0.923, BGE-M3 0.933, Qwen3-4B 1.000. BM25 は 0.019
+  - 英語の要旨からの質問は BM25 でも R@10 が 1.0 で, 差が出なかった
+  - 手作りの質問はまだない (`data/manual_questions.template.json` から追加できる)
 
 ### 5.8 MCP ツール (arxiv-mcp)
 | ツール | 内容 |
@@ -261,10 +267,10 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 | 5a | データ移行のうちコピー (parquet をそのまま RustFS へ) と確認 | 完了 (2026-11-25. 3,745 ファイルの sha256 が一致. SMB の PVC は削除) |
 | 2 | Polaris + PostgreSQL (CNPG), RustFS のサービス用ユーザー | 完了 (2026-11-22. `memo/polaris_install_memo.md`) |
 | 3 | Trino (`mcp_reader` の制限を含む) | 完了 (2026-11-22. `memo/trino_install_memo.md`) |
-| 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/science-systems/chunking-poc/README.md`). 評価データは未着手 |
+| 並行 | チャンク作成の検証, 評価データの作成 (HF の parquet を直接使う. 5.7) | チャンク作成の検証は完了 (2026-11-22. `deploy/science-systems/chunking-poc/README.md`). 評価データは引用の文脈と LLM の質問が完了 (2026-11-28. `deploy/science-systems/embedding-eval/`). 手作りの質問は未着手 |
 | 4 | 検索ノード search1 (NUC のメモリ増設, ノード追加) と OpenSearch | 未着手 |
 | 5b | データ移行のうち Iceberg テーブルの作成 (索引系の書き直し, 中身系の add_files) | 完了 (2026-11-25. 8 テーブル. `memo/arxiv_iceberg_tables_memo.md`) |
-| 6 | 埋め込みモデルの比較 (評価データで) | 未着手 |
+| 6 | 埋め込みモデルの比較 (評価データで) | 完了 (2026-11-28. Qwen3-Embedding-0.6B, title + abstract, 英語は hybrid・日本語は kNN のみ. DGX Spark 2 台で 2.6 時間. `deploy/science-systems/embedding-eval/README.md`) |
 | 7 | 全件の加工 (正規化, 節, チャンク), 論文の埋め込み (DGX Spark), 引用抽出 (自前 + OpenAlex), 索引作成 | 全件の加工は完了 (2026-11-27. 2,965,036 論文 → 節 5,127 万, チャンク 9,642 万, 506 億トークン. DGX Spark の CPU で 140 分. `arxiv-sync/src/chunks.py`, 月次は CronJob `arxiv-chunks`). 埋め込み・引用抽出・索引作成は未着手 |
 | 8 | arxiv-api と arxiv-mcp | 未着手 |
 | 9 | 最新化 (日次 OAI, 月次 S3, 四半期 OpenAlex) | OAI / PDF / ソースの取り込みと初回の追い付きが完了 (2026-11-26. `deploy/science-systems/arxiv-sync/`. ソースは 2610 まで全論文. 転送 約 390GB, 約 $35). 本文の組み立て (paper_text) も完了 (11-26). OpenAlex と正規化以降は未着手 |
@@ -337,13 +343,15 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - [x] 短い節 (100 トークン未満. 全チャンクの 5.4%) のチャンクはそのまま残す (節をまたがない. 2026-11-22 決定)
 - [x] section_type の other (28%) は今のまま (規則の分類で十分. 2026-11-22 決定)
 - [ ] 索引の容量と作成時間 (codec 別) を測る (検証の 10,000 件のチャンクを使う. OpenSearch ができてから)
-- [ ] 評価データを作る (引用の文脈, LLM 生成, 手作り)
+- [x] 評価データを作る (引用の文脈, LLM 生成) (2026-11-28. 708 件. `deploy/science-systems/embedding-eval/`)
+- [ ] 手作りの質問 50〜100 件を足して再評価する (利用者が作る)
 
 ### 全体
 - [x] ディレクトリ名の綴りを直す (2026-11-26. `deploy/sciense-systems` → `deploy/science-systems`. Application 3 つの valueFiles も変更)
 - [x] ~~science-systems の ExternalSecret `hf-token` の `refreshInterval` (15s) を 1h にする~~ (2026-11-26. 使う Job がなくなったため hf-downloader-job と一緒に削除. Vault のキーは llm-system が使う)
 - [x] AWS の認証情報 (requester-pays 用) を Vault に登録する (2026-11-26. IAM ユーザー arxiv-requester-pays, arxiv の pdf/ と src/ の一覧と読み取りのみ. Vault eso/arxiv-aws → Secret arxiv-aws. 拒否も確認済み)
-- [ ] 埋め込みモデルを決める (評価で)
+- [x] 埋め込みモデルを決める (評価で) (2026-11-28. Qwen3-Embedding-0.6B)
+- [ ] Qwen3-Embedding-4B を再検討する (search1 の CPU で質問のベクトル化の遅延を測った後. MRL で 1024 次元にした場合も評価する)
 - [ ] MCP ホスト (Open WebUI) から使うローカル LLM の提供方法を決める (vLLM のツール呼び出し対応の確認)
 - [ ] エージェントのサンドボックスの設計メモを書く
 
@@ -373,7 +381,7 @@ Intel NUC 11PAHi5 を k8s のノードとして追加し, OpenSearch とエー�
 - 読む単位 (節) と検索単位 (チャンク) を分ける. チャンクは 500〜800 トークン, オーバーラップなし
 - 検索用の本文は軽く正規化する. `\ref` の番号の解決はしない
 - OpenSearch の索引は最新版のみ. 過去の版は Iceberg で扱う
-- 埋め込みは Qwen3-Embedding-0.6B から始め, 評価データで BGE-M3 と比べて決める. MVP は論文のみ, 本文チャンクは BM25 のみ
+- 埋め込みは Qwen3-Embedding-0.6B (2026-11-28 の評価で BGE-M3 より良かった). 文書の入力は title + abstract. 英語の質問は hybrid (RRF), 日本語の質問は kNN のみ. MVP は論文のみ, 本文チャンクは BM25 のみ
 - 全件の処理の前にチャンク作成の検証と評価データの作成を行う (インフラ構築と並行)
 - MCP に検索方式の引数は出さない. `run_sql` の制限は Trino 側で強制する
 - OpenSearch は Intel NUC (64GB に増設) を検索ノード search1 とし, ローカル NVMe の PV に置く. エージェントのサンドボックスと同居させる
